@@ -1,71 +1,27 @@
+import { app } from "electron";
 import puppeteer from "puppeteer-extra";
-import { Browser, Page, ElementHandle } from "puppeteer";
+import { getChromiumPath } from "./chromium-utils";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import AnonymizeUA from "puppeteer-extra-plugin-anonymize-ua";
-import { app } from "electron";
 import path from "path";
 import fs from "fs";
-import { getChromiumPath } from "./chromium-utils";
 
-// Use plugins
 puppeteer.use(StealthPlugin());
 puppeteer.use(AnonymizeUA());
 
-// Additional stealth configurations
-puppeteer.use(require("puppeteer-extra-plugin-stealth/evasions/chrome.app")());
-puppeteer.use(require("puppeteer-extra-plugin-stealth/evasions/chrome.csi")());
-puppeteer.use(
-  require("puppeteer-extra-plugin-stealth/evasions/chrome.loadTimes")()
-);
-puppeteer.use(
-  require("puppeteer-extra-plugin-stealth/evasions/chrome.runtime")()
-);
-puppeteer.use(require("puppeteer-extra-plugin-stealth/evasions/defaultArgs")());
-puppeteer.use(
-  require("puppeteer-extra-plugin-stealth/evasions/iframe.contentWindow")()
-);
-puppeteer.use(
-  require("puppeteer-extra-plugin-stealth/evasions/media.codecs")()
-);
-puppeteer.use(
-  require("puppeteer-extra-plugin-stealth/evasions/navigator.hardwareConcurrency")()
-);
-puppeteer.use(
-  require("puppeteer-extra-plugin-stealth/evasions/navigator.languages")()
-);
-puppeteer.use(
-  require("puppeteer-extra-plugin-stealth/evasions/navigator.permissions")()
-);
-puppeteer.use(
-  require("puppeteer-extra-plugin-stealth/evasions/navigator.plugins")()
-);
-puppeteer.use(
-  require("puppeteer-extra-plugin-stealth/evasions/navigator.vendor")()
-);
-puppeteer.use(
-  require("puppeteer-extra-plugin-stealth/evasions/navigator.webdriver")()
-);
-puppeteer.use(require("puppeteer-extra-plugin-stealth/evasions/sourceurl")());
-puppeteer.use(
-  require("puppeteer-extra-plugin-stealth/evasions/user-agent-override")()
-);
-puppeteer.use(
-  require("puppeteer-extra-plugin-stealth/evasions/webgl.vendor")()
-);
-puppeteer.use(
-  require("puppeteer-extra-plugin-stealth/evasions/window.outerdimensions")()
-);
-
-// Configuration
+// ——— Configuration ———
 const BASE_SIGNIN_URL =
   "https://accounts.google.com/v3/signin/identifier?authuser=0" +
   "&continue=https%3A%2F%2Fmyaccount.google.com%2Fgeneral-light" +
   "&ec=GAlAwAE&hl=in&service=accountsettings" +
   "&flowName=GlifWebSignIn&flowEntry=AddSession";
 
-// Customize this path to point to your desired location on disk C
-const CUSTOM_ROOT = "C:/profiles"; // Shared profile directory for all features
-const ROOT = CUSTOM_ROOT || app.getPath("userData");
+// Profile root configuration - consistent with other modules
+const CUSTOM_ROOT =
+  process.platform === "win32"
+    ? "C:/profiles"
+    : `/Users/${process.env.USER || "pttas"}`;
+const ROOT = CUSTOM_ROOT;
 const PROFILES_ROOT = path.resolve(ROOT, "profiles");
 const ERRORS_ROOT = path.resolve(ROOT, "errors");
 
@@ -79,36 +35,50 @@ function sanitize(email: string): string {
   return email.replace(/[@.]/g, "_");
 }
 
-// Clear existing value and type text quickly
+// Clear existing value and type text with human-like delays
 async function clearAndType(
-  page: Page,
+  page: any,
   selector: string,
   text: string
 ): Promise<void> {
   await page.waitForSelector(selector, { visible: true, timeout: 10000 });
   const el = await page.$(selector);
-  await el!.click({ clickCount: 3 });
+  await el.click({ clickCount: 3 });
   await page.keyboard.press("Backspace");
-  // Add human-like typing with random delays
+
+  // Type with random human-like delays
   for (const char of text) {
-    await el!.type(char, { delay: Math.random() * 100 + 50 });
-    await new Promise((resolve) => setTimeout(resolve, Math.random() * 50));
+    await el.type(char, { delay: Math.random() * 200 + 50 });
+    // Occasionally add longer pauses to simulate thinking
+    if (Math.random() < 0.1) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.random() * 500 + 200)
+      );
+    }
   }
 }
 
-async function waitAndClick(page: Page, selector: string): Promise<void> {
+async function waitAndClick(page: any, selector: string): Promise<void> {
   await page.waitForSelector(selector, { visible: true, timeout: 10000 });
+  // Add random delay before clicking to simulate human behavior
+  await new Promise((resolve) =>
+    setTimeout(resolve, Math.random() * 500 + 200)
+  );
   await page.click(selector);
 }
 
-// Click element as fast as possible
-async function clickFast(page: Page, selector: string): Promise<void> {
+// Click element with human-like timing
+async function clickFast(page: any, selector: string): Promise<void> {
   await page.waitForSelector(selector, { visible: true, timeout: 10000 });
+  // Add random delay before clicking
+  await new Promise((resolve) =>
+    setTimeout(resolve, Math.random() * 300 + 100)
+  );
   await page.$eval(selector, (el: any) => el.click());
 }
 
 // Wait for device verification with timeout
-async function waitForVerification(page: Page, timeout = 60000): Promise<void> {
+async function waitForVerification(page: any, timeout = 60000): Promise<void> {
   try {
     console.log("⏳ Waiting for manual verification...");
     await Promise.race([
@@ -122,9 +92,9 @@ async function waitForVerification(page: Page, timeout = 60000): Promise<void> {
         },
         { timeout }
       ),
-      new Promise((resolve) => setTimeout(resolve, timeout)).then(() => {
-        throw new Error("Verification timeout");
-      }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Verification timeout")), timeout)
+      ),
     ]);
     console.log("✅ Verification completed");
   } catch (err: any) {
@@ -137,27 +107,14 @@ async function waitForVerification(page: Page, timeout = 60000): Promise<void> {
 }
 
 // Handle one account's login flow
-async function handleSplash(page: Page): Promise<void> {
+async function handleSplash(page: any): Promise<void> {
   try {
     await page.waitForSelector("mat-dialog-container", { timeout: 7000 });
-    const btn = await page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll("button"));
-      return buttons.find(
-        (btn) =>
-          btn.textContent?.includes("Try Gemini") ||
-          btn.textContent?.includes("Use Google AI Studio")
-      );
-    });
+    const [btn] = await page.$x(
+      "//button[contains(., 'Try Gemini') or contains(., 'Use Google AI Studio')]"
+    );
     if (btn) {
-      await page.evaluate(() => {
-        const buttons = Array.from(document.querySelectorAll("button"));
-        const targetBtn = buttons.find(
-          (btn) =>
-            btn.textContent?.includes("Try Gemini") ||
-            btn.textContent?.includes("Use Google AI Studio")
-        );
-        if (targetBtn) (targetBtn as HTMLElement).click();
-      });
+      await btn.click();
       await page.waitForSelector("mat-dialog-container", {
         hidden: true,
         timeout: 10000,
@@ -167,7 +124,7 @@ async function handleSplash(page: Page): Promise<void> {
   } catch {}
 }
 
-async function handleTOS(page: Page): Promise<void> {
+async function handleTOS(page: any): Promise<void> {
   try {
     await page.waitForSelector("#mat-mdc-checkbox-0-input", { timeout: 7000 });
     await page.click("#mat-mdc-checkbox-0-input");
@@ -183,7 +140,7 @@ async function handleTOS(page: Page): Promise<void> {
   } catch {}
 }
 
-async function handleDriveAccess(page: Page, email: string): Promise<void> {
+async function handleDriveAccess(page: any, email: string): Promise<void> {
   // 1. Add retry mechanism for initial button
   let btn;
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -201,39 +158,36 @@ async function handleDriveAccess(page: Page, email: string): Promise<void> {
         console.warn(`⚠️ Drive button not found after ${attempt} attempts`);
         return;
       }
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await page.waitForTimeout(2000);
     }
   }
 
   // 2. Enhanced popup handling
-  const popupPromise = new Promise<Page>((resolve, reject) => {
+  const popupPromise = new Promise((resolve, reject) => {
     const timeoutId = setTimeout(
       () => reject(new Error("Popup timeout")),
       30000
     );
-    page.browser().on("targetcreated", async (target) => {
+    page.browser().on("targetcreated", async (target: any) => {
       if (
         target.type() === "page" &&
         target.url().includes("accounts.google.com")
       ) {
         clearTimeout(timeoutId);
-        const popupPage = await target.page();
-        if (popupPage) {
-          resolve(popupPage);
-        }
+        resolve(await target.page());
       }
     });
   });
 
   // 3. Improved click handling
   try {
-    await Promise.all([(btn as any).click(), page.waitForTimeout(1000)]);
+    await Promise.all([btn.click(), page.waitForTimeout(1000)]);
   } catch (err) {
     // Fallback click methods
     try {
-      await page.evaluate((el) => (el as HTMLElement).click(), btn);
+      await page.evaluate((el: any) => el.click(), btn);
     } catch {
-      const box = await (btn as any).boundingBox();
+      const box = await btn.boundingBox();
       await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     }
   }
@@ -248,7 +202,7 @@ async function handleDriveAccess(page: Page, email: string): Promise<void> {
           timeout: 5000,
         }
       );
-      await (confirmBtn as any).click();
+      await confirmBtn.click();
       await page.waitForSelector("button[matdialogclose]", {
         hidden: true,
         timeout: 10000,
@@ -260,18 +214,18 @@ async function handleDriveAccess(page: Page, email: string): Promise<void> {
   }
 
   // 5. Enhanced popup handling with timeout
-  let popup: Page;
+  let popup;
   try {
     popup = await popupPromise;
-    await popup.setDefaultTimeout(60000);
-  } catch (err) {
-    console.error("⚠️ Failed to handle popup:", (err as Error).message);
+    await (popup as any).setDefaultTimeout(60000);
+  } catch (err: any) {
+    console.error("⚠️ Failed to handle popup:", err.message);
     return;
   }
 
   // 6. Improved account selection
   try {
-    await popup.waitForSelector('div[jsname="MBVUVe"]', {
+    await (popup as any).waitForSelector('div[jsname="MBVUVe"]', {
       visible: true,
       timeout: 60000,
     });
@@ -286,13 +240,13 @@ async function handleDriveAccess(page: Page, email: string): Promise<void> {
     let handle = null;
     for (const selector of selectors) {
       // Check in frames
-      for (const frame of popup.frames()) {
+      for (const frame of (popup as any).frames()) {
         handle = await frame.$(selector);
         if (handle) break;
       }
       // Check in main page
       if (!handle) {
-        handle = await popup.$(selector);
+        handle = await (popup as any).$(selector);
       }
       if (handle) break;
     }
@@ -303,24 +257,21 @@ async function handleDriveAccess(page: Page, email: string): Promise<void> {
     }
 
     // 7. Improved click handling
-    await handle.evaluate((el) =>
-      (el as HTMLElement).scrollIntoView({
-        block: "center",
-        behavior: "smooth",
-      })
+    await handle.evaluate((el: any) =>
+      el.scrollIntoView({ block: "center", behavior: "smooth" })
     );
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await (popup as any).waitForTimeout(500);
 
     try {
       await handle.click();
     } catch {
       try {
-        await popup.evaluate((el) => (el as HTMLElement).click(), handle);
+        await (popup as any).evaluate((el: any) => el.click(), handle);
       } catch {
         const box = await handle.boundingBox();
-        await popup.mouse.click(
-          box!.x + box!.width / 2,
-          box!.y + box!.height / 2
+        await (popup as any).mouse.click(
+          box.x + box.width / 2,
+          box.y + box.height / 2
         );
       }
     }
@@ -329,14 +280,17 @@ async function handleDriveAccess(page: Page, email: string): Promise<void> {
 
     // 8. Enhanced navigation waiting
     await Promise.race([
-      popup.waitForNavigation({ waitUntil: "networkidle0", timeout: 120000 }),
-      popup.waitForNavigation({ waitUntil: "load", timeout: 120000 }),
+      (popup as any).waitForNavigation({
+        waitUntil: "networkidle0",
+        timeout: 120000,
+      }),
+      (popup as any).waitForNavigation({ waitUntil: "load", timeout: 120000 }),
     ]);
-  } catch (err) {
-    console.error("⚠️ Error during account selection:", (err as Error).message);
+  } catch (err: any) {
+    console.error("⚠️ Error during account selection:", err.message);
   } finally {
-    if (popup && !popup.isClosed()) {
-      await popup.close();
+    if (popup && !(popup as any).isClosed()) {
+      await (popup as any).close();
     }
   }
 
@@ -353,7 +307,7 @@ async function handleDriveAccess(page: Page, email: string): Promise<void> {
 }
 
 async function handleOne(
-  page: Page,
+  page: any,
   { email, password }: { email: string; password: string }
 ): Promise<void> {
   const domain = email.split("@")[1];
@@ -361,8 +315,21 @@ async function handleOne(
     ? BASE_SIGNIN_URL
     : BASE_SIGNIN_URL + `&hd=${encodeURIComponent(domain)}`;
 
-  // 1) Go to sign-in page
+  // 1) Go to sign-in page with additional stealth
   await page.goto(signinUrl, { waitUntil: "domcontentloaded" });
+
+  // Add random delay before interacting
+  await new Promise((resolve) =>
+    setTimeout(resolve, Math.random() * 2000 + 1000)
+  );
+
+  // Additional stealth: emulate human-like scrolling
+  await page.evaluate(() => {
+    window.scrollTo(0, Math.floor(Math.random() * 100));
+  });
+  await new Promise((resolve) =>
+    setTimeout(resolve, Math.random() * 500 + 200)
+  );
 
   // 2) Enter email and proceed
   await clearAndType(page, "input[type=email], #identifierId", email);
@@ -453,40 +420,11 @@ export async function runLoginAll(
 ): Promise<Array<{ email: string; success: boolean; error?: string }>> {
   const chromiumPath = await getChromiumPath({
     customPaths: [
-      // Primary: Chrome for Testing
-      "C:\\Program Files\\GridVid\\resources\\chrome-for-testing\\chrome.exe",
-      "C:\\Program Files\\GridVid\\resources\\app.asar.unpacked\\chrome-for-testing\\chrome.exe",
-      path.join(__dirname, "..", "chrome-for-testing", "chrome.exe"), // Windows
-      path.join(__dirname, "..", "chrome-for-testing", "chrome"), // Linux/Mac
-      path.join(
-        __dirname,
-        "..",
-        "chrome-for-testing",
-        "Chromium.app",
-        "Contents",
-        "MacOS",
-        "Chromium"
-      ), // Mac App
-      // Fallback: puppeteer-chromium
       "C:\\Program Files\\GridVid\\resources\\puppeteer-chromium\\chrome.exe",
       "C:\\Program Files\\GridVid\\resources\\app.asar.unpacked\\puppeteer-chromium\\chrome.exe",
-      path.join(__dirname, "..", "puppeteer-chromium", "chrome.exe"), // Windows
-      path.join(__dirname, "..", "puppeteer-chromium", "chrome"), // Linux/Mac
-      path.join(
-        __dirname,
-        "..",
-        "puppeteer-chromium",
-        "Chromium.app",
-        "Contents",
-        "MacOS",
-        "Chromium"
-      ), // Mac App
+      path.join(__dirname, "puppeteer-chromium", "chrome.exe"),
     ],
   });
-
-  logCallback(
-    `Using Chromium: ${chromiumPath.path} (v${chromiumPath.version})`
-  );
 
   const results: Array<{ email: string; success: boolean; error?: string }> =
     [];
@@ -496,6 +434,9 @@ export async function runLoginAll(
 
     if (!fs.existsSync(profDir)) {
       fs.mkdirSync(profDir, { recursive: true });
+      console.log(`Created profile directory: ${profDir}`);
+    } else {
+      console.log(`Using existing profile directory: ${profDir}`);
     }
 
     fs.writeFileSync(path.join(profDir, "email.txt"), acc.email, "utf8");
@@ -503,94 +444,157 @@ export async function runLoginAll(
     logCallback(`→ [${acc.email}] profile dir: ${profDir}`);
 
     try {
-      const browser: Browser = await puppeteer.launch({
+      const browser = await puppeteer.launch({
         headless: false,
         executablePath: chromiumPath.path,
         userDataDir: profDir,
         args: [
           `--user-data-dir=${profDir}`,
           "--no-sandbox",
+          "--disable-notifications",
           "--disable-blink-features=AutomationControlled",
-          "--disable-web-security",
-          "--disable-features=VizDisplayCompositor",
-          "--disable-ipc-flooding-protection",
-          "--disable-dev-shm-usage",
-          "--disable-background-timer-throttling",
-          "--disable-backgrounding-occluded-windows",
-          "--disable-renderer-backgrounding",
-          "--disable-field-trial-config",
-          "--disable-back-forward-cache",
-          "--disable-hang-monitor",
-          "--disable-ipc-flooding-protection",
-          "--disable-popup-blocking",
-          "--disable-prompt-on-repost",
-          "--force-color-profile=srgb",
+          "--lang=in-ID",
+          "--start-maximized",
+          // Enhanced stealth flags
+          "--disable-extensions-except=/dev/null",
+          "--disable-extensions",
+          "--disable-plugins",
+          "--disable-default-apps",
+          "--disable-sync",
+          "--disable-translate",
+          "--hide-scrollbars",
           "--metrics-recording-only",
-          "--no-first-run",
-          "--enable-automation",
-          "--password-store=basic",
-          "--use-mock-keychain",
-          "--no-default-browser-check",
-          "--no-pings",
-          "--no-zygote",
-          "--disable-gpu-sandbox",
-          "--disable-software-rasterizer",
-          "--disable-background-media-download",
-          "--disable-features=TranslateUI",
-          "--disable-features=BlinkGenPropertyTrees",
+          "--mute-audio",
           "--no-crash-upload",
           "--disable-logging",
           "--disable-login-animations",
-          "--disable-notifications",
           "--disable-permissions-api",
           "--disable-session-crashed-bubble",
           "--disable-infobars",
-          "--lang=en-US",
-          "--start-maximized",
+          "--disable-component-extensions-with-background-pages",
+          "--disable-background-networking",
+          "--disable-component-update",
+          "--disable-domain-reliability",
+          "--disable-client-side-phishing-detection",
+          "--disable-field-trial-config",
+          "--disable-back-forward-cache",
+          "--disable-hang-monitor",
+          "--disable-prompt-on-repost",
+          "--force-color-profile=srgb",
+          "--disable-features=UserMediaScreenCapturing",
+          "--disable-popup-blocking",
+          "--disable-print-preview",
+          "--disable-background-timer-throttling",
+          "--disable-backgrounding-occluded-windows",
+          "--disable-renderer-backgrounding",
+          "--disable-ipc-flooding-protection",
         ],
         defaultViewport: null,
+        ignoreDefaultArgs: ["--enable-automation"], // Remove automation indicators
       });
 
-      const page: Page = await browser.newPage();
+      const page = await browser.newPage();
 
-      // Set realistic viewport
-      await page.setViewport({ width: 1366, height: 768 });
+      // Set realistic viewport and user agent
+      await page.setViewport({
+        width: 1366 + Math.floor(Math.random() * 200),
+        height: 768 + Math.floor(Math.random() * 200),
+        deviceScaleFactor: 1,
+        hasTouch: false,
+        isLandscape: true,
+        isMobile: false,
+      });
 
-      // Set realistic user agent
-      await page.setUserAgent(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      );
-
-      // Add human-like behavior
+      // Override navigator properties to avoid detection
       await page.evaluateOnNewDocument(() => {
         // Override webdriver property
         Object.defineProperty(navigator, "webdriver", {
           get: () => undefined,
         });
 
-        // Mock languages and plugins
+        // Override plugins to look more like a real browser
+        Object.defineProperty(navigator, "plugins", {
+          get: () => [
+            {
+              0: {
+                type: "application/x-google-chrome-pdf",
+                suffixes: "pdf",
+                description: "Portable Document Format",
+                __pluginName: "Chrome PDF Plugin",
+              },
+              description: "Portable Document Format",
+              filename: "internal-pdf-viewer",
+              length: 1,
+              name: "Chrome PDF Plugin",
+            },
+            {
+              0: {
+                type: "application/pdf",
+                suffixes: "pdf",
+                description: "",
+                __pluginName: "Chrome PDF Viewer",
+              },
+              description: "",
+              filename: "mhjfbmdgcfjbbpaeojofohoefgiehjai",
+              length: 1,
+              name: "Chrome PDF Viewer",
+            },
+            {
+              0: {
+                type: "application/x-nacl",
+                suffixes: "",
+                description: "Native Client Executable",
+                __pluginName: "Native Client",
+              },
+              description: "Native Client Executable",
+              filename: "internal-nacl-plugin",
+              length: 1,
+              name: "Native Client",
+            },
+            {
+              0: {
+                type: "application/x-pnacl",
+                suffixes: "",
+                description: "Portable Native Client Executable",
+                __pluginName: "Portable Native Client",
+              },
+              description: "Portable Native Client Executable",
+              filename: "internal-pnacl-plugin",
+              length: 1,
+              name: "Portable Native Client",
+            },
+          ],
+        });
+
+        // Override permissions
+        const originalQuery = window.navigator.permissions.query;
+        window.navigator.permissions.query = (parameters) =>
+          parameters.name === "notifications"
+            ? Promise.resolve({
+                state: Notification.permission,
+              } as PermissionStatus)
+            : originalQuery(parameters);
+
+        // Override languages
         Object.defineProperty(navigator, "languages", {
           get: () => ["en-US", "en"],
         });
 
-        Object.defineProperty(navigator, "plugins", {
-          get: () => [1, 2, 3, 4, 5],
+        // Override platform
+        Object.defineProperty(navigator, "platform", {
+          get: () => "MacIntel",
         });
-
-        // Mock permissions
-        const originalQuery = window.navigator.permissions.query;
-        window.navigator.permissions.query = (parameters) =>
-          parameters.name === "notifications"
-            ? Promise.resolve({ state: Notification.permission })
-            : originalQuery(parameters);
       });
 
       // Add random delays to simulate human behavior
       await new Promise((resolve) =>
-        setTimeout(resolve, Math.random() * 2000 + 1000)
+        setTimeout(resolve, Math.random() * 1000 + 500)
       );
 
       await handleOne(page, acc);
+
+      // Keep browser open for a moment to ensure profile is properly saved
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
       results.push({ email: acc.email, success: true });
       await browser.close();

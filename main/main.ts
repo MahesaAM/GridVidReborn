@@ -72,7 +72,12 @@ let appSettings = {
 };
 
 // Video generation configuration
-const PROFILES_DIR = join(app.getPath("userData"), "profiles");
+const CUSTOM_ROOT =
+  process.platform === "win32"
+    ? "C:/profiles"
+    : `/Users/${process.env.USER || "pttas"}`;
+const ROOT = CUSTOM_ROOT;
+const PROFILES_DIR = path.resolve(ROOT, "profiles");
 const PROFILES_ROOT = PROFILES_DIR; // Alias for compatibility
 const AI_STUDIO_URL =
   "https://aistudio.google.com/prompts/new_video?model=veo-2.0-generate-001";
@@ -120,21 +125,64 @@ async function createWindow() {
       contextIsolation: true,
       webSecurity: false, // Temporarily disable for local development with Puppeteer
       devTools: true, // Enable dev tools for debugging
-      additionalArguments: [`--remote-debugging-port=${remoteDebuggingPort}`],
+      additionalArguments: [
+        `--remote-debugging-port=${remoteDebuggingPort}`,
+        // Remove restrictive flags that prevent normal browsing
+        // "--disable-extensions-except=/dev/null",
+        // "--disable-extensions",
+        // "--disable-plugins",
+        // "--disable-default-apps",
+        // "--disable-sync",
+        // "--disable-translate",
+        // "--hide-scrollbars",
+        // "--metrics-recording-only",
+        // "--mute-audio",
+        // "--no-crash-upload",
+        // "--disable-logging",
+        // "--disable-login-animations",
+        // "--disable-notifications",
+        // "--disable-permissions-api",
+        // "--disable-session-crashed-bubble",
+        // "--disable-infobars",
+        // "--disable-component-extensions-with-background-pages",
+        // "--disable-background-networking",
+        // "--disable-component-update",
+        // "--disable-domain-reliability",
+        // "--disable-client-side-phishing-detection",
+        // "--disable-field-trial-config",
+        // "--disable-back-forward-cache",
+        // "--disable-hang-monitor",
+        // "--disable-prompt-on-repost",
+        // "--force-color-profile=srgb",
+        // "--disable-features=UserMediaScreenCapturing",
+        // "--disable-popup-blocking",
+        // "--disable-print-preview",
+        // "--disable-background-timer-throttling",
+        // "--disable-backgrounding-occluded-windows",
+        // "--disable-renderer-backgrounding",
+        // "--disable-ipc-flooding-protection",
+      ],
       partition: "persist:main", // Use persistent session for cookies
       webviewTag: true, // Enable webview tag
     },
   });
 
-  if ((import.meta.env as any).VITE_DEV_SERVER_URL) {
-    // electron-vite-vue#298
-    win.loadURL(url!);
-    // Open devTool if the app is not packaged
-    // win.webContents.openDevTools();
-  } else {
-    win.loadFile(join(process.env.DIST!, "index.html"));
-    // Open devTools in production for debugging
-    // win.webContents.openDevTools();
+  try {
+    if ((import.meta.env as any).VITE_DEV_SERVER_URL) {
+      // electron-vite-vue#298
+      await win.loadURL(url!);
+      // Open devTool if the app is not packaged
+      // win.webContents.openDevTools();
+    } else {
+      win.loadFile(join(process.env.DIST!, "index.html"));
+      // Open devTools in production for debugging
+      // win.webContents.openDevTools();
+    }
+  } catch (error) {
+    console.error("Failed to load window URL:", error);
+    sendLogToRenderer(
+      `ERROR: Failed to load window URL: ${(error as Error).message}`
+    );
   }
 
   // Test actively push message to the Electron-Renderer
@@ -153,7 +201,7 @@ async function createWindow() {
   // win.webContents.on('will-navigate', (event, url) => { }) #344
 }
 
-app.whenReady().then(createWindow);
+// app.whenReady().then(createWindow); // Removed duplicate call
 
 app.on("window-all-closed", () => {
   win = null;
@@ -248,7 +296,16 @@ ipcMain.handle("open-profile-window", async (event, email: string) => {
     });
 
     // Load a blank page initially, Puppeteer will navigate it
-    profileWindow.loadURL("about:blank");
+    try {
+      await profileWindow.loadURL("about:blank");
+    } catch (error) {
+      console.error("Failed to load blank page in profile window:", error);
+      sendLogToRenderer(
+        `ERROR: Failed to load blank page in profile window: ${
+          (error as Error).message
+        }`
+      );
+    }
 
     // Attach Puppeteer to this window's webContents
     const page = (await browser.pages())[0]; // Get the first page
@@ -263,7 +320,19 @@ ipcMain.handle("open-profile-window", async (event, email: string) => {
       // use electron-puppeteer or similar, or ensure the BrowserWindow is launched
       // with remote debugging enabled and connect Puppeteer to it.
       // For manual intervention, we'll just open a new Electron window.
-      profileWindow.loadURL("https://accounts.google.com/"); // Example: open Google login
+      try {
+        await profileWindow.loadURL("https://accounts.google.com/"); // Example: open Google login
+      } catch (error) {
+        console.error(
+          "Failed to load Google accounts in profile window:",
+          error
+        );
+        sendLogToRenderer(
+          `ERROR: Failed to load Google accounts in profile window: ${
+            (error as Error).message
+          }`
+        );
+      }
     }
 
     profileWindow.on("closed", async () => {
@@ -789,10 +858,7 @@ ipcMain.handle(
           `Using account ${acc.email} for prompt ${promptIndex + 1}`
         );
 
-        const profileDir = path.join(
-          PROFILES_DIR,
-          acc.email.replace(/[@.]/g, "_")
-        );
+        const profileDir = path.join(PROFILES_DIR, sanitize(acc.email));
 
         try {
           const browser = await puppeteer.launch({
@@ -801,53 +867,214 @@ ipcMain.handle(
             userDataDir: profileDir,
             args: [
               "--no-sandbox",
-              "--disable-notifications",
-              "--disable-blink-features=AutomationControlled",
+              // Remove restrictive flags that prevent normal browsing
+              // "--disable-notifications",
+              // "--disable-blink-features=AutomationControlled",
               "--lang=en-US",
+              // Keep minimal stealth flags for anti-detection
+              // "--disable-extensions-except=/dev/null",
+              // "--disable-extensions",
+              // "--disable-plugins",
+              // "--disable-default-apps",
+              // "--disable-sync",
+              // "--disable-translate",
+              // "--hide-scrollbars",
+              // "--metrics-recording-only",
+              // "--mute-audio",
+              // "--no-crash-upload",
+              // "--disable-logging",
+              // "--disable-login-animations",
+              // "--disable-permissions-api",
+              // "--disable-session-crashed-bubble",
+              // "--disable-infobars",
+              // "--disable-component-extensions-with-background-pages",
+              // "--disable-background-networking",
+              // "--disable-component-update",
+              // "--disable-domain-reliability",
+              // "--disable-client-side-phishing-detection",
+              // "--disable-field-trial-config",
+              // "--disable-back-forward-cache",
+              // "--disable-hang-monitor",
+              // "--disable-prompt-on-repost",
+              // "--force-color-profile=srgb",
+              // "--disable-features=UserMediaScreenCapturing",
+              // "--disable-popup-blocking",
+              // "--disable-print-preview",
+              // "--disable-background-timer-throttling",
+              // "--disable-backgrounding-occluded-windows",
+              // "--disable-renderer-backgrounding",
+              // "--disable-ipc-flooding-protection",
             ],
             defaultViewport: null,
+            ignoreDefaultArgs: ["--enable-automation"], // Remove automation indicators
           });
           currentBrowser = browser;
 
           const page = await browser.newPage();
           page.setDefaultNavigationTimeout(60000);
 
-          // Navigate to Google sign-in page
-          const signInUrl =
-            "https://accounts.google.com/v3/signin/identifier?continue=https%3A%2F%2Faistudio.google.com%2F&dsh=S-1709684080%3A1761108691277369&flowEntry=ServiceLogin&flowName=GlifWebSignIn&ifkv=AfYwgwXX7JIEPrWn9WRo4MRS8bjkgUXmrcXBDaVU1fOAyDQIeA0I3tGCtHBotZG-cqU67l8phAGF4Q";
-          await page.goto(signInUrl, { waitUntil: "domcontentloaded" });
-
-          // Get password for the account
-          const password = await profileManager.getAccountPassword(acc.id);
-          if (!password) {
-            throw new Error(`Password not found for account ${acc.email}`);
-          }
-
-          // Fill email
-          await page.waitForSelector('input[type="email"]', {
-            visible: true,
-            timeout: 10000,
-          });
-          await page.type('input[type="email"]', acc.email);
-          await page.click("#identifierNext");
-
-          // Wait for password field
-          await page.waitForSelector('input[type="password"]', {
-            visible: true,
-            timeout: 10000,
-          });
-          await page.type('input[type="password"]', password);
-          await page.click("#passwordNext");
-
-          // Wait for successful login or redirect
-          await page.waitForNavigation({
-            waitUntil: "networkidle0",
-            timeout: 30000,
+          // Set realistic viewport and user agent
+          await page.setViewport({
+            width: 1366 + Math.floor(Math.random() * 200),
+            height: 768 + Math.floor(Math.random() * 200),
+            deviceScaleFactor: 1,
+            hasTouch: false,
+            isLandscape: true,
+            isMobile: false,
           });
 
-          // Navigate to AI Studio if not already there
-          if (!page.url().includes("aistudio.google.com")) {
-            await page.goto(AI_STUDIO_URL, { waitUntil: "networkidle0" });
+          // Override navigator properties to avoid detection
+          await page.evaluateOnNewDocument(() => {
+            // Override webdriver property
+            Object.defineProperty(navigator, "webdriver", {
+              get: () => undefined,
+            });
+
+            // Override plugins to look more like a real browser
+            Object.defineProperty(navigator, "plugins", {
+              get: () => [
+                {
+                  0: {
+                    type: "application/x-google-chrome-pdf",
+                    suffixes: "pdf",
+                    description: "Portable Document Format",
+                    __pluginName: "Chrome PDF Plugin",
+                  },
+                  description: "Portable Document Format",
+                  filename: "internal-pdf-viewer",
+                  length: 1,
+                  name: "Chrome PDF Plugin",
+                },
+                {
+                  0: {
+                    type: "application/pdf",
+                    suffixes: "pdf",
+                    description: "",
+                    __pluginName: "Chrome PDF Viewer",
+                  },
+                  description: "",
+                  filename: "mhjfbmdgcfjbbpaeojofohoefgiehjai",
+                  length: 1,
+                  name: "Chrome PDF Viewer",
+                },
+                {
+                  0: {
+                    type: "application/x-nacl",
+                    suffixes: "",
+                    description: "Native Client Executable",
+                    __pluginName: "Native Client",
+                  },
+                  description: "Native Client Executable",
+                  filename: "internal-nacl-plugin",
+                  length: 1,
+                  name: "Native Client",
+                },
+                {
+                  0: {
+                    type: "application/x-pnacl",
+                    suffixes: "",
+                    description: "Portable Native Client Executable",
+                    __pluginName: "Portable Native Client",
+                  },
+                  description: "Portable Native Client Executable",
+                  filename: "internal-pnacl-plugin",
+                  length: 1,
+                  name: "Portable Native Client",
+                },
+              ],
+            });
+
+            // Override permissions
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) =>
+              parameters.name === "notifications"
+                ? Promise.resolve({
+                    state: Notification.permission,
+                  } as PermissionStatus)
+                : originalQuery(parameters);
+
+            // Override languages
+            Object.defineProperty(navigator, "languages", {
+              get: () => ["en-US", "en"],
+            });
+
+            // Override platform
+            Object.defineProperty(navigator, "platform", {
+              get: () => "MacIntel",
+            });
+          });
+
+          // Add random delays to simulate human behavior
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.random() * 1000 + 500)
+          );
+
+          // Navigate directly to AI Studio - assuming profile is already logged in
+          await page.goto(AI_STUDIO_URL, { waitUntil: "networkidle0" });
+
+          // Check if we're logged in by looking for authentication indicators
+          const isLoggedIn = await page.evaluate(() => {
+            // Check for common logged-in indicators
+            const hasUserMenu =
+              document.querySelector('[aria-label*="Account"]') ||
+              document.querySelector(".user-menu") ||
+              document.querySelector('[data-testid*="account"]');
+            const hasProfilePic =
+              document.querySelector('img[alt*="profile"]') ||
+              document.querySelector('img[alt*="avatar"]');
+            const noLoginButton =
+              !document.querySelector('a[href*="signin"]') &&
+              !document.querySelector('button:contains("Sign in")');
+
+            return !!(hasUserMenu || hasProfilePic || noLoginButton);
+          });
+
+          if (!isLoggedIn) {
+            sendLogToRenderer(
+              `Account ${acc.email} not logged in, attempting login...`
+            );
+
+            // Navigate to Google sign-in page
+            const signInUrl =
+              "https://accounts.google.com/v3/signin/identifier?continue=https%3A%2F%2Faistudio.google.com%2F&dsh=S-1709684080%3A1761108691277369&flowEntry=ServiceLogin&flowName=GlifWebSignIn&ifkv=AfYwgwXX7JIEPrWn9WRo4MRS8bjkgUXmrcXBDaVU1fOAyDQIeA0I3tGCtHBotZG-cqU67l8phAGF4Q";
+            await page.goto(signInUrl, { waitUntil: "domcontentloaded" });
+
+            // Get password for the account
+            const password = await profileManager.getAccountPassword(acc.id);
+            if (!password) {
+              throw new Error(`Password not found for account ${acc.email}`);
+            }
+
+            // Fill email
+            await page.waitForSelector('input[type="email"]', {
+              visible: true,
+              timeout: 10000,
+            });
+            await page.type('input[type="email"]', acc.email);
+            await page.click("#identifierNext");
+
+            // Wait for password field
+            await page.waitForSelector('input[type="password"]', {
+              visible: true,
+              timeout: 10000,
+            });
+            await page.type('input[type="password"]', password);
+            await page.click("#passwordNext");
+
+            // Wait for successful login or redirect
+            await page.waitForNavigation({
+              waitUntil: "networkidle0",
+              timeout: 30000,
+            });
+
+            // Navigate to AI Studio if not already there
+            if (!page.url().includes("aistudio.google.com")) {
+              await page.goto(AI_STUDIO_URL, { waitUntil: "networkidle0" });
+            }
+          } else {
+            sendLogToRenderer(
+              `Account ${acc.email} already logged in, proceeding with generation...`
+            );
           }
 
           await handleSplash(page);

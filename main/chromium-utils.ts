@@ -59,14 +59,14 @@ export async function getChromiumPath(
   // Fallback to puppeteer-chromium in project directory
   const puppeteerChromiumPaths = [
     path.join(projectRoot, "puppeteer-chromium", "chrome.exe"), // Windows
-    path.join(projectRoot, "puppeteer-chromium", "chrome"), // Linux/Mac
+    path.join(projectRoot, "puppeteer-chromium", "chrome"), // Linux
     path.join(
       projectRoot,
       "puppeteer-chromium",
-      "Chromium.app",
+      "chrome.app",
       "Contents",
       "MacOS",
-      "Chromium"
+      "Google Chrome for Testing"
     ), // Mac App
   ];
 

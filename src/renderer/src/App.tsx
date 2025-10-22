@@ -194,7 +194,10 @@ function App() {
 
         // Navigate to Google sign-in page using the working URL structure
         const signinUrl =
-          "https://accounts.google.com/v3/signin/identifier?continue=https%3A%2F%2Faistudio.google.com%2F&flowEntry=ServiceLogin&flowName=GlifWebSignIn";
+          "https://accounts.google.com/v3/signin/identifier?authuser=0" +
+          "&continue=https%3A%2F%2Fmyaccount.google.com%2Fgeneral-light" +
+          "&ec=GAlAwAE&hl=in&service=accountsettings" +
+          "&flowName=GlifWebSignIn&flowEntry=AddSession";
 
         setCurrentUrl(signinUrl);
 

@@ -8,6 +8,19 @@ import { v4 as uuidv4 } from "uuid";
 const DB_PATH = path.join(app.getPath("userData"), "database.sqlite");
 const SERVICE_NAME = "GridAutomationStudio";
 
+// Profile root configuration
+const CUSTOM_ROOT =
+  process.platform === "win32"
+    ? "C:/profiles"
+    : `/Users/${process.env.USER || "pttas"}`;
+const ROOT = CUSTOM_ROOT;
+const PROFILES_ROOT = path.resolve(ROOT, "profiles");
+
+// Sanitize email to use as folder name
+function sanitize(email: string): string {
+  return email.replace(/[@.]/g, "_");
+}
+
 export interface Account {
   id: string;
   email: string;
@@ -112,7 +125,7 @@ class ProfileManager {
     await keytar.deletePassword(SERVICE_NAME, id);
     this.db.prepare("DELETE FROM accounts WHERE id = ?").run(id);
     // Optionally, clean up user data directory
-    const userDataDir = path.join(app.getPath("userData"), "profiles", id); // Assuming profile dir uses account ID
+    const userDataDir = path.join(PROFILES_ROOT, id); // Using account ID as folder name
     try {
       await fs.rm(userDataDir, { recursive: true, force: true });
     } catch (error) {
