@@ -1192,6 +1192,11 @@ ipcMain.handle("test-browser-control", async () => {
   }
 });
 
+// IPC handler to provide the preload script path for webviews
+ipcMain.handle("get-webview-preload-path", () => {
+  return path.join(__dirname, "../../preload-webview.js");
+});
+
 // Initialize settings when the app is ready
 app.whenReady().then(async () => {
   await loadSettings();

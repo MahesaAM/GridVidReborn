@@ -8,13 +8,20 @@ import { v4 as uuidv4 } from "uuid";
 const DB_PATH = path.join(app.getPath("userData"), "database.sqlite");
 const SERVICE_NAME = "GridAutomationStudio";
 
-// Profile root configuration
+// Profile root configuration - use app's user data directory for cross-platform compatibility
 const CUSTOM_ROOT =
   process.platform === "win32"
     ? "C:/profiles"
     : `/Users/${process.env.USER || "pttas"}`;
-const ROOT = CUSTOM_ROOT;
+const ROOT = CUSTOM_ROOT || app.getPath("userData");
 const PROFILES_ROOT = path.resolve(ROOT, "profiles");
+const ERRORS_ROOT = path.resolve(ROOT, "errors");
+
+// Create root folders if they don't exist
+import fsSync from "fs";
+for (const dir of [PROFILES_ROOT, ERRORS_ROOT]) {
+  if (!fsSync.existsSync(dir)) fsSync.mkdirSync(dir, { recursive: true });
+}
 
 // Sanitize email to use as folder name
 function sanitize(email: string): string {

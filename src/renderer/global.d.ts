@@ -79,6 +79,7 @@ declare global {
         callback: (event: any, message: string) => void
       ) => () => void;
       testBrowserControl: () => Promise<{ success: boolean; message: string }>;
+      getWebviewPreloadPath: () => Promise<string>;
     };
   }
 }

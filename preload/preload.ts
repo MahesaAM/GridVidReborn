@@ -5,22 +5,26 @@ const api = {
   // General IPC
   sendMessage: (message: string) => ipcRenderer.send("message", message),
   onUpdateAccounts: (callback: (accounts: any[]) => void) => {
-    const handler = (_, accounts: any[]) => callback(accounts);
+    const handler = (_: Electron.IpcRendererEvent, accounts: any[]) =>
+      callback(accounts);
     ipcRenderer.on("update-accounts", handler);
     return () => ipcRenderer.off("update-accounts", handler);
   },
   onUpdateTasks: (callback: (tasks: any[]) => void) => {
-    const handler = (_, tasks: any[]) => callback(tasks);
+    const handler = (_: Electron.IpcRendererEvent, tasks: any[]) =>
+      callback(tasks);
     ipcRenderer.on("update-tasks", handler);
     return () => ipcRenderer.off("update-tasks", handler);
   },
   onLogMessage: (callback: (log: string) => void) => {
-    const handler = (_, log: string) => callback(log);
+    const handler = (_: Electron.IpcRendererEvent, log: string) =>
+      callback(log);
     ipcRenderer.on("log-message", handler);
     return () => ipcRenderer.off("log-message", handler);
   },
   onNotification: (callback: (options: any) => void) => {
-    const handler = (_, options: any) => callback(options);
+    const handler = (_: Electron.IpcRendererEvent, options: any) =>
+      callback(options);
     ipcRenderer.on("notification", handler);
     return () => ipcRenderer.off("notification", handler);
   },
@@ -78,6 +82,9 @@ const api = {
   // Single Account Login
   loginSingleAccount: (account: { email: string; password: string }) =>
     ipcRenderer.invoke("login-single-account", account),
+
+  // Webview Preload Path
+  getWebviewPreloadPath: () => ipcRenderer.invoke("get-webview-preload-path"),
 };
 
 // Use `contextBridge`s to expose Electron APIs to

@@ -21,7 +21,7 @@ const CUSTOM_ROOT =
   process.platform === "win32"
     ? "C:/profiles"
     : `/Users/${process.env.USER || "pttas"}`;
-const ROOT = CUSTOM_ROOT;
+const ROOT = CUSTOM_ROOT || app.getPath("userData");
 const PROFILES_ROOT = path.resolve(ROOT, "profiles");
 const ERRORS_ROOT = path.resolve(ROOT, "errors");
 

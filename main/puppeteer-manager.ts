@@ -4,13 +4,20 @@ import path from "path";
 import { spawn, ChildProcess } from "child_process";
 import { app } from "electron";
 
-// Profile root configuration
+// Profile root configuration - consistent with other modules
 const CUSTOM_ROOT =
   process.platform === "win32"
     ? "C:/profiles"
     : `/Users/${process.env.USER || "pttas"}`;
-const ROOT = CUSTOM_ROOT;
+const ROOT = CUSTOM_ROOT || app.getPath("userData");
 const PROFILES_ROOT = path.resolve(ROOT, "profiles");
+const ERRORS_ROOT = path.resolve(ROOT, "errors");
+
+// Create root folders if they don't exist
+const fs = require("node:fs");
+for (const dir of [PROFILES_ROOT, ERRORS_ROOT]) {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
 
 // Sanitize email to use as folder name
 function sanitize(email: string): string {
