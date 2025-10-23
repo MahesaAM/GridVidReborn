@@ -1011,10 +1011,10 @@ function App() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3 }}
-                    className="w-full h-full bg-white rounded-lg border border-white/20 overflow-hidden"
+                    className="w-full h-full bg-white rounded-lg border border-white/20 overflow-auto flex flex-col"
                   >
                     {/* URL Bar */}
-                    <div className="flex items-center p-3 bg-gray-100 border-b border-gray-300">
+                    <div className="flex items-center p-3 bg-gray-100 border-b border-gray-300 flex-shrink-0">
                       <form
                         onSubmit={handleUrlSubmit}
                         className="flex-1 flex items-center space-x-2"
@@ -1044,7 +1044,7 @@ function App() {
                     <webview
                       ref={webviewRef}
                       src={currentUrl}
-                      className="w-full h-full border-0"
+                      className="w-full flex-1 border-0"
                       partition="persist:main"
                       preload={preloadPath}
                       allowpopups
