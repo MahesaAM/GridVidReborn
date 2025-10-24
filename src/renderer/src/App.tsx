@@ -535,6 +535,37 @@ function App() {
           );
           await new Promise((resolve) => setTimeout(resolve, 5000));
 
+          // Check for "Enable saving" button and click if present
+          await webviewRef.current.executeJavaScript(`
+            const enableBtn = document.querySelector('.enable-drive-button');
+            if (enableBtn) {
+              enableBtn.click();
+              // Wait for popup and click "Allow" using MutationObserver
+              const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                  mutation.addedNodes.forEach((node) => {
+                    if (node.nodeType === 1) { // ELEMENT_NODE
+                      const allowBtn = node.querySelector('#submit_approve_access') ||
+                                      document.getElementById('submit_approve_access');
+                      if (allowBtn && !allowBtn.disabled) {
+                        allowBtn.click();
+                        observer.disconnect();
+                      }
+                    }
+                  });
+                });
+              });
+              observer.observe(document.body, { childList: true, subtree: true });
+              // Also check immediately in case it's already there
+              const existingBtn = document.getElementById('submit_approve_access');
+              if (existingBtn && !existingBtn.disabled) {
+                existingBtn.click();
+                observer.disconnect();
+              }
+            }
+          `);
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+
           // Handle splash dialog
           await webviewRef.current.executeJavaScript(`
             const splashDialog = document.querySelector('mat-dialog-container');
