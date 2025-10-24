@@ -31,6 +31,11 @@ declare global {
     canGoForward(): boolean;
     executeJavaScript(code: string): Promise<any>;
     onDomReady?: () => void;
+    addEventListener(type: "ipc-message", listener: (event: any) => void): void;
+    removeEventListener(
+      type: "ipc-message",
+      listener: (event: any) => void
+    ): void;
   }
 
   interface Window {

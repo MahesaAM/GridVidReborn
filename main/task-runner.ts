@@ -152,19 +152,22 @@ class TaskRunner {
   }
 
   private async inputPrompt(page: Page, prompt: string): Promise<void> {
-    // Placeholder selector for prompt input
-    const promptSelector =
-      "textarea[placeholder*='prompt'], input[placeholder*='prompt']";
-    await page.waitForSelector(promptSelector, {
-      visible: true,
-      timeout: 10000,
-    });
-    await page.click(promptSelector);
-    await page.keyboard.type(prompt, { delay: 100 });
+    const textareaSel = 'textarea[placeholder="Describe your video"]';
+    await page.waitForSelector(textareaSel, { visible: true, timeout: 10000 });
+    // Use direct value setting to simulate input
+    await page.evaluate((text) => {
+      const ta = document.querySelector(
+        'textarea[placeholder="Describe your video"]'
+      ) as HTMLTextAreaElement;
+      if (!ta) throw new Error("Prompt textarea not found");
+      ta.value = text;
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.dispatchEvent(new Event("change", { bubbles: true }));
+    }, prompt);
   }
 
   private async uploadImage(page: Page, imagePath: string): Promise<void> {
-    // Placeholder selector for image upload
+    // Assuming the file input is for image upload; may need adjustment based on page
     const uploadSelector = "input[type='file']";
     const input = await page.$(uploadSelector);
     if (input) {
@@ -178,45 +181,53 @@ class TaskRunner {
     page: Page,
     duration: string = "5s"
   ): Promise<void> {
-    // Placeholder selector for duration
-    const durationSelector = `button[data-value="${duration}"], [aria-label="${duration}"]`;
-    await page.waitForSelector(durationSelector, {
+    // Click the duration selector
+    await page.click('mat-select[id="duration-selector"]');
+    await page.waitForTimeout(1000);
+    // Select the option based on duration
+    const optionSelector = `mat-option[value="${duration}"]`;
+    await page.waitForSelector(optionSelector, {
       visible: true,
       timeout: 5000,
     });
-    await page.click(durationSelector);
+    await page.click(optionSelector);
   }
 
   private async selectAspectRatio(
     page: Page,
     aspect: string = "16:9"
   ): Promise<void> {
-    // Placeholder selector for aspect ratio
-    const aspectSelector = `button[data-value="${aspect}"], [aria-label="${aspect}"]`;
-    await page.waitForSelector(aspectSelector, {
-      visible: true,
-      timeout: 5000,
-    });
-    await page.click(aspectSelector);
+    const normalizedAspect = aspect.trim();
+    const aspectRatioXPath =
+      normalizedAspect === "16:9"
+        ? "//ms-aspect-ratio-radio-button//button[.//div[contains(@class, 'aspect-ratio-text') and normalize-space(text())='16:9']]"
+        : "//ms-aspect-ratio-radio-button//button[.//div[contains(@class, 'aspect-ratio-text') and normalize-space(text())='9:16']]";
+    await page.waitForTimeout(1000);
+    const [aspectRatioButton] = await page.$x(aspectRatioXPath);
+    if (aspectRatioButton) {
+      await aspectRatioButton.click();
+    } else {
+      throw new Error(`Aspect ratio ${aspect} not found`);
+    }
   }
 
   private async clickRun(page: Page): Promise<void> {
-    const runSelector =
-      'button.run-button[type="submit"], button[aria-label="Run"]';
+    // Assuming the run button is the submit button or has aria-label "Run"; adjust if needed
+    const runSelector = 'button[type="submit"], button[aria-label="Run"]';
     await page.waitForSelector(runSelector, { visible: true, timeout: 10000 });
     await page.click(runSelector);
   }
 
   private async waitForGenerationComplete(page: Page): Promise<void> {
-    // Placeholder: wait for download button or completion indicator
-    await page.waitForSelector('.download-button, [aria-label="Download"]', {
+    // Wait for download button to appear
+    await page.waitForSelector('button[aria-label="Download"]', {
       visible: true,
       timeout: 300000,
     }); // 5 min timeout
   }
 
   private async downloadVideo(page: Page, taskId: string): Promise<string> {
-    const downloadSelector = '.download-button, button[aria-label="Download"]';
+    const downloadSelector = 'button[aria-label="Download"]';
     await page.waitForSelector(downloadSelector, {
       visible: true,
       timeout: 10000,
@@ -378,7 +389,14 @@ class TaskRunner {
           return; // Stop if batch is paused
         }
 
-        if (remainingQuota <= 0) break; // No more quota
+        // Re-check quota before each task
+        const currentQuota = await this.checkQuota(page);
+        if (currentQuota <= 0) {
+          console.log(
+            `Quota exhausted for ${account.email} during task ${task.id}`
+          );
+          break;
+        }
 
         task.status = "running";
         console.log(

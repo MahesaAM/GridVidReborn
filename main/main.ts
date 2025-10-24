@@ -52,6 +52,7 @@ app.commandLine.appendSwitch(
 );
 
 let win: BrowserWindow | null = null;
+let popupWindow: BrowserWindow | null = null; // Declare popupWindow here
 // Here you can define the specific port for remote debugging
 const remoteDebuggingPort = 9222;
 
@@ -208,7 +209,8 @@ async function createWindow() {
       url.includes("oauth2") ||
       url.includes("drive.google.com")
     ) {
-      const popup = new BrowserWindow({
+      popupWindow = new BrowserWindow({
+        // Assign to popupWindow
         width: 600,
         height: 700,
         parent: win!,
@@ -218,10 +220,14 @@ async function createWindow() {
           nodeIntegration: false,
           sandbox: true,
           partition: "persist:main", // Use same partition for session persistence
+          preload: join(__dirname, "../../preload-popup.js"), // Ensure preload script is loaded
         },
       });
 
-      popup.loadURL(url);
+      popupWindow.loadURL(url);
+      popupWindow.on("closed", () => {
+        popupWindow = null; // Clear reference when closed
+      });
       return { action: "deny" }; // Prevent default behavior
     }
 
@@ -1246,7 +1252,7 @@ ipcMain.handle("test-browser-control", async () => {
 
 // IPC handler to provide the preload script path for webviews
 ipcMain.handle("get-webview-preload-path", () => {
-  return path.join(__dirname, "../../preload-webview.js");
+  return path.join(__dirname, "../preload/preload-webview.js");
 });
 
 // Popup window creation handler
@@ -1295,6 +1301,62 @@ ipcMain.handle(
 // Handler untuk mendapatkan preload path popup
 ipcMain.handle("get-popup-preload-path", () => {
   return path.join(__dirname, "../../preload-popup.js");
+});
+
+// IPC handlers for webview messages
+ipcMain.on("allow-button-clicked", (event) => {
+  win?.webContents.send("allow-button-clicked");
+});
+
+ipcMain.on("auto-allow-clicked", (event) => {
+  win?.webContents.send("auto-allow-clicked");
+});
+
+ipcMain.on("allow-button-not-found", (event) => {
+  win?.webContents.send("allow-button-not-found");
+});
+
+ipcMain.on("click-allow-button", async () => {
+  if (popupWindow) {
+    try {
+      // Execute JavaScript in the popup window to click the button
+      const clickResult = await popupWindow.webContents.executeJavaScript(`
+        new Promise((resolve) => {
+          const interval = setInterval(() => {
+            const button = document.getElementById("submit_approve_access");
+            if (button && button.offsetParent !== null) { // Check for visibility
+              clearInterval(interval);
+              button.click();
+              resolve(true); // Button found and clicked
+            }
+          }, 200); // Check every 200ms
+          setTimeout(() => {
+            clearInterval(interval);
+            resolve(false); // Timeout, button not found or not visible
+          }, 10000); // 10 seconds timeout
+        });
+      `);
+
+      if (clickResult) {
+        win?.webContents.send("allow-button-clicked");
+        sendLogToRenderer("Allow button clicked in popup.");
+      } else {
+        win?.webContents.send("allow-button-not-found");
+        sendLogToRenderer(
+          "ERROR: Allow button not found or not visible in popup after waiting."
+        );
+      }
+    } catch (error: any) {
+      console.error("Error during popup button click execution:", error);
+      win?.webContents.send("allow-button-not-found");
+      sendLogToRenderer(
+        `ERROR: Failed to execute click script in popup: ${error.message}`
+      );
+    }
+  } else {
+    win?.webContents.send("allow-button-not-found");
+    sendLogToRenderer("ERROR: Popup window not found to click allow button.");
+  }
 });
 
 // Initialize settings when the app is ready

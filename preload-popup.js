@@ -13,4 +13,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   closePopup: () => {
     window.close();
   },
+  clickAllowButton: () => {
+    ipcRenderer.send("click-allow-button");
+  },
 });
+
+// Expose clickAllowButton directly on the window object for external scripts
+window.clickAllowButton = () => {
+  ipcRenderer.send("click-allow-button");
+};

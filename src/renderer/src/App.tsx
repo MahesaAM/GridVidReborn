@@ -49,6 +49,9 @@ function App() {
   const [logs, setLogs] = useState<string[]>([]);
   const [stats, setStats] = useState({ total: 0, success: 0, failed: 0 });
 
+  // State untuk tracking popup
+  const [isPopupDetected, setIsPopupDetected] = useState(false);
+
   // Refs
   const promptsTextareaRef = useRef<HTMLTextAreaElement>(null);
   const savePathInputRef = useRef<HTMLInputElement>(null);
@@ -82,6 +85,41 @@ function App() {
     return unsubscribe;
   }, []);
 
+  // Effect untuk listen messages dari webview
+  useEffect(() => {
+    const handleWebviewMessage = (event: any) => {
+      console.log("Message from webview:", event.channel, event.args);
+
+      switch (event.channel) {
+        case "allow-button-clicked":
+          setLogs((prev) => [...prev, "✓ Tombol Allow berhasil diklik"]);
+          setIsPopupDetected(false);
+          break;
+
+        case "auto-allow-clicked":
+          setLogs((prev) => [
+            ...prev,
+            "✓ Auto-detected dan mengklik tombol Allow",
+          ]);
+          setIsPopupDetected(false);
+          break;
+
+        case "allow-button-not-found":
+          setLogs((prev) => [...prev, "✗ Tombol Allow tidak ditemukan"]);
+          break;
+      }
+    };
+
+    if (webviewRef.current) {
+      const webview = webviewRef.current;
+      webview.addEventListener("ipc-message", handleWebviewMessage);
+
+      return () => {
+        webview.removeEventListener("ipc-message", handleWebviewMessage);
+      };
+    }
+  }, []);
+
   // Test webview navigation listener
   useEffect(() => {
     const handleTestNavigation = (
@@ -105,10 +143,10 @@ function App() {
                   const form = searchBox.closest('form');
                   if (form) form.submit();
                 }
-              }, 2000);
+              }, 1000);
             `);
           }
-        }, 3000);
+        }, 1500);
       }
     };
 
@@ -134,10 +172,10 @@ function App() {
                   const form = searchBox.closest('form');
                   if (form) form.submit();
                 }
-              }, 2000);
+              }, 1000);
             `);
           }
-        }, 3000);
+        }, 1500);
       }
     };
 
@@ -179,6 +217,66 @@ function App() {
       console.error("Test failed:", error);
       alert(`Test failed: ${error.message}`);
     }
+  };
+
+  // Fungsi khusus untuk klik tombol Allow
+  const clickAllowButton = async (): Promise<boolean> => {
+    if (!webviewRef.current) return false;
+
+    try {
+      const result = await webviewRef.current.executeJavaScript(`
+        (async () => {
+          return await window.clickAllowButton();
+        })()
+      `);
+
+      return result;
+    } catch (error) {
+      console.error("Error clicking Allow button:", error);
+      setLogs((prev) => [...prev, `✗ Error: ${error.message}`]);
+      return false;
+    }
+  };
+
+  // Fungsi untuk detect dan handle popup Allow
+  const detectAndHandleAllowPopup = async () => {
+    setLogs((prev) => [...prev, "Mencari popup Allow..."]);
+    setIsPopupDetected(true);
+
+    // Coba beberapa kali dengan interval
+    let attempts = 0;
+    const maxAttempts = 5;
+
+    const tryClickAllow = async () => {
+      attempts++;
+      const success = await clickAllowButton();
+
+      if (success) {
+        setLogs((prev) => [
+          ...prev,
+          `✓ Berhasil mengklik Allow pada percobaan ke-${attempts}`,
+        ]);
+        return true;
+      }
+
+      if (attempts < maxAttempts) {
+        setLogs((prev) => [
+          ...prev,
+          `✗ Percobaan ${attempts} gagal, mencoba lagi dalam 2 detik...`,
+        ]);
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        return tryClickAllow();
+      } else {
+        setLogs((prev) => [
+          ...prev,
+          `✗ Gagal mengklik Allow setelah ${maxAttempts} percobaan`,
+        ]);
+        setIsPopupDetected(false);
+        return false;
+      }
+    };
+
+    return tryClickAllow();
   };
 
   const handleGenerate = async () => {
@@ -229,7 +327,7 @@ function App() {
         setCurrentUrl(signinUrl);
 
         // Wait for page to load, then fill email
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+        await new Promise((resolve) => setTimeout(resolve, 1500));
 
         if (webviewRef.current) {
           // Focus on email input first, then type email with subtle human-like behavior
@@ -260,10 +358,10 @@ function App() {
                             el.dispatchEvent(new Event('change', { bubbles: true }));
                             i++;
 
-                            // Natural typing rhythm: slightly faster than before
-                            let delay = 100 + Math.random() * 50; // 100-150ms
+                            // Natural typing rhythm: faster
+                            let delay = 50 + Math.random() * 50; // 50-100ms
                             if (text[i-1] === '@' || text[i-1] === '.') {
-                              delay = 200 + Math.random() * 100; // Slightly longer pause for special chars
+                              delay = 100 + Math.random() * 50; // Shorter pause for special chars
                             }
 
                             setTimeout(typeChar, delay);
@@ -271,7 +369,7 @@ function App() {
                             // Email typing complete
                             setTimeout(() => {
                               resolve();
-                            }, 500 + Math.random() * 500);
+                            }, 200 + Math.random() * 300);
                           }
                         };
 
@@ -353,7 +451,7 @@ function App() {
                             setTimeout(() => {
                               btn.click();
                               resolve('clicked likely next button: ' + text);
-                            }, 300 + Math.random() * 200);
+                            }, 150 + Math.random() * 100);
                             clicked = true;
                             break;
                           }
@@ -364,7 +462,7 @@ function App() {
                     if (!clicked) {
                       resolve('no button found');
                     }
-                  }, 2000 + Math.random() * 1000); // Consistent wait time
+                  }, 1000 + Math.random() * 500); // Faster wait time
                 });
               });
             })()
@@ -372,7 +470,7 @@ function App() {
           await webviewRef.current.executeJavaScript(emailScript);
 
           // Wait for password page and fill password
-          await new Promise((resolve) => setTimeout(resolve, 5000));
+          await new Promise((resolve) => setTimeout(resolve, 2500));
 
           const passwordScript = `
             (function() {
@@ -394,8 +492,8 @@ function App() {
                           el.dispatchEvent(new Event('change', { bubbles: true }));
                           i++;
 
-                          // Natural typing rhythm for password
-                          let delay = 120 + Math.random() * 80; // 120-200ms (slightly slower for password)
+                          // Natural typing rhythm for password: faster
+                          let delay = 60 + Math.random() * 60; // 60-120ms
                           setTimeout(typeChar, delay);
                         } else {
                           resolve();
@@ -477,7 +575,7 @@ function App() {
                             setTimeout(() => {
                               btn.click();
                               resolve('clicked likely next button: ' + text);
-                            }, 300 + Math.random() * 200);
+                            }, 150 + Math.random() * 100);
                             clicked = true;
                             break;
                           }
@@ -488,7 +586,7 @@ function App() {
                     if (!clicked) {
                       resolve('no button found');
                     }
-                  }, 2000 + Math.random() * 1000); // Consistent wait time
+                  }, 1000 + Math.random() * 500); // Faster wait time
                 });
               });
             })()
@@ -496,7 +594,7 @@ function App() {
           await webviewRef.current.executeJavaScript(passwordScript);
 
           // Wait for login to complete
-          await new Promise((resolve) => setTimeout(resolve, 15000));
+          await new Promise((resolve) => setTimeout(resolve, 6000));
 
           // Check current URL and handle various scenarios
           const currentUrl = await webviewRef.current.executeJavaScript(
@@ -526,45 +624,43 @@ function App() {
                 confirmBtn.click();
               }
             `);
-            await new Promise((resolve) => setTimeout(resolve, 3000));
+            await new Promise((resolve) => setTimeout(resolve, 1500));
           }
 
           // Navigate to AI Studio video generation page with better URL
           setCurrentUrl(
             "https://aistudio.google.com/u/0/generate-video?pli=1&authuser=0"
           );
-          await new Promise((resolve) => setTimeout(resolve, 5000));
+          await new Promise((resolve) => setTimeout(resolve, 2500));
 
-          // Check for "Enable saving" button and click if present
+          // Handle Enable Drive button dengan penanganan Allow yang lebih robust
           await webviewRef.current.executeJavaScript(`
+            // Cari dan klik Enable Drive button
             const enableBtn = document.querySelector('.enable-drive-button');
             if (enableBtn) {
+              console.log('Enable Drive button found, clicking...');
               enableBtn.click();
-              // Wait for popup and click "Allow" using MutationObserver
-              const observer = new MutationObserver((mutations) => {
-                mutations.forEach((mutation) => {
-                  mutation.addedNodes.forEach((node) => {
-                    if (node.nodeType === 1) { // ELEMENT_NODE
-                      const allowBtn = node.querySelector('#submit_approve_access') ||
-                                      document.getElementById('submit_approve_access');
-                      if (allowBtn && !allowBtn.disabled) {
-                        allowBtn.click();
-                        observer.disconnect();
-                      }
-                    }
-                  });
-                });
-              });
-              observer.observe(document.body, { childList: true, subtree: true });
-              // Also check immediately in case it's already there
-              const existingBtn = document.getElementById('submit_approve_access');
-              if (existingBtn && !existingBtn.disabled) {
-                existingBtn.click();
-                observer.disconnect();
-              }
+
+              // Trigger auto-detect untuk popup Allow
+              setTimeout(() => {
+                if (window.autoDetectAllowPopup) {
+                  window.autoDetectAllowPopup();
+                }
+              }, 1000);
+            } else {
+              console.log('Enable Drive button not found');
             }
           `);
+
+          // Tunggu sebentar untuk popup muncul, lalu coba klik Allow
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+
+          // Manual attempt untuk klik Allow
+          await detectAndHandleAllowPopup();
+
+          // Tunggu dan coba lagi untuk memastikan
           await new Promise((resolve) => setTimeout(resolve, 3000));
+          await detectAndHandleAllowPopup();
 
           // Handle splash dialog
           await webviewRef.current.executeJavaScript(`
@@ -595,7 +691,7 @@ function App() {
           `);
 
           // Wait for TOS acceptance
-          await new Promise((resolve) => setTimeout(resolve, 10000));
+          await new Promise((resolve) => setTimeout(resolve, 4000));
 
           // Navigate to the specific video generation page
           setCurrentUrl(
@@ -618,7 +714,7 @@ function App() {
             setCurrentUrl(
               "https://aistudio.google.com/prompts/new_video?model=veo-2.0-generate-001"
             );
-            await new Promise((resolve) => setTimeout(resolve, 5000));
+            await new Promise((resolve) => setTimeout(resolve, 2500));
           }
 
           // Set prompt
@@ -654,7 +750,7 @@ function App() {
                     option.click();
                   }
                 });
-              }, 1000);
+              }, 500);
             }
           `);
 
@@ -695,7 +791,12 @@ function App() {
               return "failed";
             }
 
-            if (document.querySelectorAll("video").length > 0) {
+            const hasVideo = Boolean(
+              await webviewRef.current.executeJavaScript(`
+              !!document.querySelectorAll("video").length
+            `)
+            );
+            if (hasVideo) {
               // Video generated successfully
               const videoUrl = await webviewRef.current.executeJavaScript(`
                 const videos = document.querySelectorAll("video");
@@ -1056,41 +1157,13 @@ function App() {
               {/* Browser View and Logs */}
               <div className="flex-1 flex flex-col p-4 relative">
                 {/* Browser View */}
-                <div className="flex-1 mb-4">
+                <div className="flex-1 mb-4 relative">
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3 }}
                     className="w-full h-full bg-white rounded-lg border border-white/20 overflow-auto flex flex-col"
                   >
-                    {/* URL Bar */}
-                    <div className="flex items-center p-3 bg-gray-100 border-b border-gray-300 flex-shrink-0">
-                      <form
-                        onSubmit={handleUrlSubmit}
-                        className="flex-1 flex items-center space-x-2"
-                      >
-                        <input
-                          type="text"
-                          value={currentUrl}
-                          onChange={handleUrlChange}
-                          placeholder="Enter URL"
-                          className="flex-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
-                        />
-                        <button
-                          type="submit"
-                          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors"
-                        >
-                          Go
-                        </button>
-                      </form>
-                      <button
-                        onClick={handleReload}
-                        className="ml-2 p-2 bg-gray-200 hover:bg-gray-300 rounded-md transition-colors"
-                        title="Reload"
-                      >
-                        <RotateCcw className="w-4 h-4 text-gray-700" />
-                      </button>
-                    </div>
                     <webview
                       ref={webviewRef}
                       src={currentUrl}
@@ -1101,47 +1174,33 @@ function App() {
                       webpreferences="contextIsolation=no,nodeIntegration=no"
                     />
                   </motion.div>
+
+                  {/* UI Indicator untuk Popup Detection */}
+                  {isPopupDetected && (
+                    <div className="absolute top-4 right-4 bg-yellow-500 text-white px-4 py-2 rounded-lg shadow-lg">
+                      <div className="flex items-center">
+                        <div className="animate-pulse mr-2">🔍</div>
+                        Mencari popup Allow...
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Logs */}
-                <div className="h-48 bg-black rounded-lg border border-white/20 overflow-hidden">
-                  <div className="p-3 border-b border-white/10">
-                    <h3 className="text-sm font-semibold text-white">Logs</h3>
-                  </div>
-                  <div className="p-3 h-32 overflow-y-auto text-xs text-white/70 font-mono">
-                    {logs.length === 0 ? (
-                      <div className="text-white/50">No logs yet...</div>
-                    ) : (
-                      logs.map((log, index) => (
-                        <div key={index} className="mb-1">
-                          {log}
-                        </div>
-                      ))
-                    )}
+                <div className="h-64 bg-white/5 rounded-lg border border-white/10 p-4 overflow-y-auto">
+                  <h3 className="text-lg font-semibold mb-2">Logs</h3>
+                  <div className="space-y-1">
+                    {logs.map((log, index) => (
+                      <div key={index} className="text-sm text-white/70">
+                        {log}
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
             </>
           ) : (
-            /* Settings View */
-            <div className="flex-1 p-8 overflow-auto relative">
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                <SettingsPage />
-              </motion.div>
-
-              {/* Back Button */}
-              <button
-                onClick={() => setCurrentView("main")}
-                className="absolute top-6 left-6 p-3 bg-white/10 hover:bg-white/20 rounded-lg border border-white/20 transition-colors duration-200"
-                title="Back to Main"
-              >
-                ← Back
-              </button>
-            </div>
+            <SettingsPage onBack={() => setCurrentView("main")} />
           )}
         </div>
       </div>

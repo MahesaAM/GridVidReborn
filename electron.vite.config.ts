@@ -27,17 +27,20 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       outDir: "dist-electron/preload",
-      lib: {
-        entry: resolve(__dirname, "preload/preload.ts"),
-        formats: ["cjs"],
-      },
       rollupOptions: {
+        input: {
+          preload: resolve(__dirname, "preload/preload.ts"),
+          "preload-webview": resolve(__dirname, "preload-webview.js"),
+        },
         output: {
-          entryFileNames: "preload.js",
+          dir: "dist-electron/preload",
+          format: "cjs",
+          entryFileNames: "[name].js",
         },
       },
     },
   },
+
   renderer: {
     root: ".", // Set the root to the project root where index.html is located
     plugins: [react()],

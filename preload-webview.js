@@ -144,4 +144,90 @@ const PROFILE = {
     loadTimes: function () {},
     app: { isInstalled: false },
   };
+
+  // 11. Fungsi khusus untuk tombol Allow dengan ID spesifik
+  const { ipcRenderer } = require("electron");
+
+  window.clickAllowButton = async () => {
+    console.log("Mencari tombol Allow dengan ID submit_approve_access...");
+
+    // Strategy 1: Cari langsung dengan ID
+    const allowButton = document.getElementById("submit_approve_access");
+    if (allowButton) {
+      console.log("Tombol Allow ditemukan dengan ID submit_approve_access");
+
+      // Pastikan tombol bisa diklik
+      if (!allowButton.disabled && allowButton.offsetParent !== null) {
+        allowButton.click();
+        ipcRenderer.sendToHost("allow-button-clicked");
+        return true;
+      } else {
+        console.log(
+          "Tombol ditemukan tapi tidak bisa diklik (disabled/hidden)"
+        );
+      }
+    }
+
+    // Strategy 2: Cari dengan class yang spesifik
+    const allowByClass = document.querySelector(".JIE42b");
+    if (allowByClass) {
+      console.log("Tombol Allow ditemukan dengan class JIE42b");
+      allowByClass.click();
+      ipcRenderer.sendToHost("allow-button-clicked");
+      return true;
+    }
+
+    // Strategy 3: Cari dengan kombinasi type="submit" dan teks "Allow"
+    const buttons = Array.from(
+      document.querySelectorAll('button, input[type="submit"]')
+    );
+    const allowByText = buttons.find((button) => {
+      const text = button.textContent?.trim();
+      return text === "Allow" || text === "Izinkan";
+    });
+
+    if (allowByText) {
+      console.log("Tombol Allow ditemukan berdasarkan teks");
+      allowByText.click();
+      ipcRenderer.sendToHost("allow-button-clicked");
+      return true;
+    }
+
+    console.log("Tombol Allow tidak ditemukan");
+    ipcRenderer.sendToHost("allow-button-not-found");
+    return false;
+  };
+
+  // Auto-detect untuk popup Allow
+  window.autoDetectAllowPopup = () => {
+    // Cek setiap 2 detik apakah tombol Allow muncul
+    const checkInterval = setInterval(() => {
+      const allowButton = document.getElementById("submit_approve_access");
+      if (
+        allowButton &&
+        !allowButton.disabled &&
+        allowButton.offsetParent !== null
+      ) {
+        console.log("Auto-detected Allow button, clicking...");
+        allowButton.click();
+        ipcRenderer.sendToHost("auto-allow-clicked");
+        clearInterval(checkInterval);
+      }
+    }, 2000);
+
+    // Hentikan setelah 30 detik
+    setTimeout(() => {
+      clearInterval(checkInterval);
+      console.log("Auto-detect Allow button timeout");
+    }, 30000);
+  };
+
+  // Jalankan auto-detect saat halaman load
+  document.addEventListener("DOMContentLoaded", () => {
+    if (window.location.href.includes("accounts.google.com")) {
+      setTimeout(() => {
+        window.autoDetectAllowPopup();
+      }, 1000);
+    }
+  });
 })();
