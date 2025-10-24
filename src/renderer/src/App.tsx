@@ -149,6 +149,25 @@ function App() {
     };
   }, []);
 
+  // Webview popup handling
+  useEffect(() => {
+    if (webviewRef.current) {
+      const webview = webviewRef.current;
+
+      // Handle new window events (popups)
+      const handleNewWindow = (event: any) => {
+        // Allow popups to open - they will be handled by main process setWindowOpenHandler
+        console.log("Popup requested:", event.url);
+      };
+
+      webview.addEventListener("new-window", handleNewWindow);
+
+      return () => {
+        webview.removeEventListener("new-window", handleNewWindow);
+      };
+    }
+  }, [webviewRef]);
+
   const handleTestBrowser = async () => {
     try {
       const result = await window.electron.testBrowserControl();
@@ -791,8 +810,8 @@ function App() {
           className="w-80 p-6 flex flex-col border-r border-white/10 overflow-y-auto"
         >
           <div className="flex items-center mb-10">
-            <img src="/vite.svg" alt="Logo" className="h-8 w-8 mr-3" />
-            <h1 className="text-2xl font-bold text-white">GridAutomation</h1>
+            {/* <img src="/vite.svg" alt="Logo" className="h-8 w-8 mr-3" /> */}
+            <h1 className="text-2xl font-bold text-white">GridVid</h1>
           </div>
 
           {/* Mode Toggle */}
@@ -1047,7 +1066,8 @@ function App() {
                       className="w-full flex-1 border-0"
                       partition="persist:main"
                       preload={preloadPath}
-                      allowpopups
+                      allowpopups="true"
+                      webpreferences="contextIsolation=no,nodeIntegration=no"
                     />
                   </motion.div>
                 </div>

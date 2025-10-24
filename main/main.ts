@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain, dialog } from "electron";
+import { app, BrowserWindow, shell, ipcMain, dialog, session } from "electron";
 import { release } from "node:os";
 import { join } from "node:path";
 import { profileManager } from "./profile-manager";
@@ -41,8 +41,15 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 // Remove electron security warnings
-// Read more on https://www.electronjs.org/docs/latest/tutorial/security
 // process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
+
+// Disable Cross-Origin policies and third-party cookie blocking for Google OAuth
+app.commandLine.appendSwitch("disable-features", "CrossOriginOpenerPolicy");
+app.commandLine.appendSwitch("disable-features", "CrossOriginEmbedderPolicy");
+app.commandLine.appendSwitch(
+  "disable-features",
+  "SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure"
+);
 
 let win: BrowserWindow | null = null;
 // Here you can define the specific port for remote debugging
@@ -193,11 +200,56 @@ async function createWindow() {
     // win?.webContents.send('update-tasks', taskRunner.getTasks()); // Assuming taskRunner has a getTasks method
   });
 
-  // Make all links open with the default browser
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  // Handle popup windows from webview (Google OAuth)
+  win!.webContents.setWindowOpenHandler(({ url }) => {
+    // Check if it's a Google OAuth or accounts URL
+    if (
+      url.includes("accounts.google.com") ||
+      url.includes("oauth2") ||
+      url.includes("drive.google.com")
+    ) {
+      const popup = new BrowserWindow({
+        width: 600,
+        height: 700,
+        parent: win!,
+        modal: false,
+        webPreferences: {
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+          partition: "persist:main", // Use same partition for session persistence
+        },
+      });
+
+      popup.loadURL(url);
+      return { action: "deny" }; // Prevent default behavior
+    }
+
+    // For other external links, open in default browser
     if (url.startsWith("https:")) shell.openExternal(url);
     return { action: "deny" };
   });
+
+  // Allow permissions for Google domains
+  session.defaultSession.setPermissionRequestHandler(
+    (
+      webContents: any,
+      permission: string,
+      callback: (permissionGranted: boolean) => void
+    ) => {
+      if (["openExternal", "popup", "fullscreen"].includes(permission)) {
+        callback(true);
+      } else {
+        callback(false);
+      }
+    }
+  );
+
+  // Optional: log every popup created
+  win!.webContents.on("did-create-window", (child) => {
+    console.log("Popup created:", child.webContents.getURL());
+  });
+
   // win.webContents.on('will-navigate', (event, url) => { }) #344
 }
 
@@ -1195,6 +1247,54 @@ ipcMain.handle("test-browser-control", async () => {
 // IPC handler to provide the preload script path for webviews
 ipcMain.handle("get-webview-preload-path", () => {
   return path.join(__dirname, "../../preload-webview.js");
+});
+
+// Popup window creation handler
+ipcMain.handle(
+  "create-popup-window",
+  async (event, { url, width, height, title }) => {
+    try {
+      const popupWindow = new BrowserWindow({
+        width: width || 800,
+        height: height || 600,
+        title: title || "Popup",
+        parent: win!,
+        modal: false,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          webSecurity: false,
+          allowRunningInsecureContent: true,
+          webgl: true,
+          enableWebSQL: true,
+          partition: "persist:main", // Use same partition for session persistence
+          additionalArguments: [
+            `--webview-token=${Math.random().toString(36)}`,
+          ],
+        },
+      });
+
+      // Remove menu bar in popup
+      popupWindow.setMenuBarVisibility(false);
+
+      await popupWindow.loadURL(url);
+
+      // Handle window closed
+      popupWindow.on("closed", () => {
+        // Cleanup if needed
+      });
+
+      return { success: true, windowId: popupWindow.id };
+    } catch (error: any) {
+      console.error("Failed to create popup window:", error);
+      return { success: false, error: error.message };
+    }
+  }
+);
+
+// Handler untuk mendapatkan preload path popup
+ipcMain.handle("get-popup-preload-path", () => {
+  return path.join(__dirname, "../../preload-popup.js");
 });
 
 // Initialize settings when the app is ready
