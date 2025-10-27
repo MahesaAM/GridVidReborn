@@ -120,6 +120,24 @@ function App() {
     }
   }, []);
 
+  // Effect to listen for popup events from the main process
+  useEffect(() => {
+    const unsubscribes = [
+      window.electron.onAllowButtonClicked(() => {
+        setLogs((prev) => [...prev, "✓ Tombol Allow di popup berhasil diklik"]);
+        setIsPopupDetected(false);
+      }),
+      window.electron.onAllowButtonNotFound(() => {
+        setLogs((prev) => [...prev, "✗ Tombol Allow di popup tidak ditemukan"]);
+        setIsPopupDetected(false);
+      }),
+    ];
+
+    return () => {
+      unsubscribes.forEach((unsubscribe) => unsubscribe());
+    };
+  }, []);
+
   // Test webview navigation listener
   useEffect(() => {
     const handleTestNavigation = (
@@ -228,64 +246,39 @@ function App() {
     }
   };
 
-  // Fungsi khusus untuk klik tombol Allow
-  const clickAllowButton = async (): Promise<boolean> => {
-    if (!webviewRef.current) return false;
-
-    try {
-      const result = await webviewRef.current.executeJavaScript(`
-        (async () => {
-          return await window.clickAllowButton();
-        })()
-      `);
-
-      return result;
-    } catch (error) {
-      console.error("Error clicking Allow button:", error);
-      setLogs((prev) => [...prev, `✗ Error: ${(error as Error).message}`]);
-      return false;
-    }
+  // Fungsi khusus untuk klik tombol Allow via IPC
+  const clickAllowButton = () => {
+    window.electron.clickAllowButton();
   };
 
   // Fungsi untuk detect dan handle popup Allow
-  const detectAndHandleAllowPopup = async () => {
-    setLogs((prev) => [...prev, "Mencari popup Allow..."]);
+  const detectAndHandleAllowPopup = () => {
+    setLogs((prev) => [...prev, "Meminta untuk mengklik tombol di popup..."]);
     setIsPopupDetected(true);
 
-    // Coba beberapa kali dengan interval
-    let attempts = 0;
-    const maxAttempts = 5;
+    // The retry logic is in the main process. We just need to trigger it.
+    clickAllowButton();
+    // The result will be handled by the onAllowButtonClicked/onAllowButtonNotFound listeners.
+  };
 
-    const tryClickAllow = async () => {
-      attempts++;
-      const success = await clickAllowButton();
+  const enableSaving = async () => {
+    if (!webviewRef.current) return;
+    setLogs((prev) => [...prev, "Mencari tombol 'Enable saving'..."]);
 
-      if (success) {
-        setLogs((prev) => [
-          ...prev,
-          `✓ Berhasil mengklik Allow pada percobaan ke-${attempts}`,
-        ]);
-        return true;
-      }
-
-      if (attempts < maxAttempts) {
-        setLogs((prev) => [
-          ...prev,
-          `✗ Percobaan ${attempts} gagal, mencoba lagi dalam 2 detik...`,
-        ]);
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        return tryClickAllow();
+    await webviewRef.current.executeJavaScript(`
+      const enableBtn = document.querySelector('.enable-drive-button');
+      if (enableBtn) {
+        console.log('Enable Drive button found, clicking...');
+        enableBtn.click();
       } else {
-        setLogs((prev) => [
-          ...prev,
-          `✗ Gagal mengklik Allow setelah ${maxAttempts} percobaan`,
-        ]);
-        setIsPopupDetected(false);
-        return false;
+        console.log('Enable Drive button not found');
       }
-    };
+    `);
 
-    return tryClickAllow();
+    // Wait for the popup to appear and then handle it
+    setLogs((prev) => [...prev, "Menunggu popup pemilihan akun..."]);
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    await detectAndHandleAllowPopup();
   };
 
   const handleGenerate = async () => {
@@ -305,6 +298,27 @@ function App() {
       alert("Please select a save path");
       return;
     }
+
+    // Helper function to wait for webview to finish loading
+    const waitForDomReady = (): Promise<void> => {
+      return new Promise((resolve) => {
+        if (!webviewRef.current) {
+          console.log("Webview ref not found, resolving immediately.");
+          return resolve();
+        }
+        const webview = webviewRef.current;
+
+        const listener = () => {
+          console.log("DOM is ready.");
+          webview.removeEventListener("dom-ready", listener as any);
+          // A small delay can help ensure all scripts on the page have executed
+          setTimeout(resolve, 500);
+        };
+
+        console.log("Adding dom-ready listener.");
+        webview.addEventListener("dom-ready", listener as any);
+      });
+    };
 
     try {
       setIsGenerating(true);
@@ -333,10 +347,9 @@ function App() {
           "&ec=GAlAwAE&hl=in&service=accountsettings" +
           "&flowName=GlifWebSignIn&flowEntry=AddSession";
 
+        const navigationPromise = waitForDomReady();
         setCurrentUrl(signinUrl);
-
-        // Wait for page to load, then fill email
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await navigationPromise;
 
         if (webviewRef.current) {
           // Focus on email input first, then type email with subtle human-like behavior
@@ -478,7 +491,7 @@ function App() {
           `;
           await webviewRef.current.executeJavaScript(emailScript);
 
-          // Wait for password page and fill password
+          // Wait for password page to appear (SPA transition, no dom-ready event)
           await new Promise((resolve) => setTimeout(resolve, 2500));
 
           const passwordScript = `
@@ -600,10 +613,9 @@ function App() {
               });
             })()
           `;
+          const loginPromise = waitForDomReady();
           await webviewRef.current.executeJavaScript(passwordScript);
-
-          // Wait for login to complete
-          await new Promise((resolve) => setTimeout(resolve, 6000));
+          await loginPromise;
 
           // Check current URL and handle various scenarios
           const currentUrl = await webviewRef.current.executeJavaScript(
@@ -627,49 +639,25 @@ function App() {
 
           // Handle speedbump
           if (currentUrl.includes("/speedbump/")) {
+            const speedbumpPromise = waitForDomReady();
             await webviewRef.current.executeJavaScript(`
               const confirmBtn = document.querySelector('input#confirm, input[jsname="M2UYVd"]');
               if (confirmBtn) {
                 confirmBtn.click();
               }
             `);
-            await new Promise((resolve) => setTimeout(resolve, 1500));
+            await speedbumpPromise;
           }
 
           // Navigate to AI Studio video generation page with better URL
+          const studioPromise = waitForDomReady();
           setCurrentUrl(
             "https://aistudio.google.com/u/0/generate-video?pli=1&authuser=0"
           );
-          await new Promise((resolve) => setTimeout(resolve, 2500));
+          await studioPromise;
 
-          // Handle Enable Drive button dengan penanganan Allow yang lebih robust
-          await webviewRef.current.executeJavaScript(`
-            // Cari dan klik Enable Drive button
-            const enableBtn = document.querySelector('.enable-drive-button');
-            if (enableBtn) {
-              console.log('Enable Drive button found, clicking...');
-              enableBtn.click();
-
-              // Trigger auto-detect untuk popup Allow
-              setTimeout(() => {
-                if (window.autoDetectAllowPopup) {
-                  window.autoDetectAllowPopup();
-                }
-              }, 1000);
-            } else {
-              console.log('Enable Drive button not found');
-            }
-          `);
-
-          // Tunggu sebentar untuk popup muncul, lalu coba klik Allow
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-
-          // Manual attempt untuk klik Allow
-          await detectAndHandleAllowPopup();
-
-          // Tunggu dan coba lagi untuk memastikan
-          await new Promise((resolve) => setTimeout(resolve, 3000));
-          await detectAndHandleAllowPopup();
+          // Handle Enable Drive button
+          await enableSaving();
 
           // Handle splash dialog
           await webviewRef.current.executeJavaScript(`
@@ -703,10 +691,11 @@ function App() {
           await new Promise((resolve) => setTimeout(resolve, 4000));
 
           // Navigate to the specific video generation page
+          const finalPagePromise = waitForDomReady();
           setCurrentUrl(
             "https://aistudio.google.com/prompts/new_video?model=veo-2.0-generate-001"
           );
-          await new Promise((resolve) => setTimeout(resolve, 5000));
+          await finalPagePromise;
         }
       };
 
@@ -1182,7 +1171,7 @@ function App() {
                     <div className="absolute top-4 right-4 bg-yellow-500 text-white px-4 py-2 rounded-lg shadow-lg">
                       <div className="flex items-center">
                         <div className="animate-pulse mr-2">🔍</div>
-                        Mencari popup Allow...
+                        Mencari popup...
                       </div>
                     </div>
                   )}

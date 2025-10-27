@@ -110,34 +110,45 @@ async function waitForVerification(page: any, timeout = 60000): Promise<void> {
 async function handleSplash(page: any): Promise<void> {
   try {
     await page.waitForSelector("mat-dialog-container", { timeout: 7000 });
-    const [btn] = await page.$x(
-      "//button[contains(., 'Try Gemini') or contains(., 'Use Google AI Studio')]"
+    const splashButton = await page.$(
+      'button[aria-label*="Gemini"], button[aria-label*="Studio"]'
     );
-    if (btn) {
-      await btn.click();
+    if (splashButton) {
+      await splashButton.click();
       await page.waitForSelector("mat-dialog-container", {
         hidden: true,
         timeout: 10000,
       });
       console.log("✔️ Splash dialog closed");
     }
-  } catch {}
+  } catch (err) {
+    console.log("ℹ️ No splash dialog found, skipping.");
+  }
 }
 
 async function handleTOS(page: any): Promise<void> {
-  try {
-    await page.waitForSelector("#mat-mdc-checkbox-0-input", { timeout: 7000 });
-    await page.click("#mat-mdc-checkbox-0-input");
-    if (await page.$("#mat-mdc-checkbox-1-input")) {
-      await page.click("#mat-mdc-checkbox-1-input");
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await page.waitForSelector('mat-checkbox[id*="mat-mdc-checkbox"]', {
+        timeout: 7000,
+      });
+      const checkboxes = await page.$$('mat-checkbox[id*="mat-mdc-checkbox"]');
+      for (const checkbox of checkboxes) {
+        await checkbox.click();
+      }
+      await waitAndClick(page, 'button[aria-label*="Accept"]');
+      await page.waitForSelector('mat-checkbox[id*="mat-mdc-checkbox"]', {
+        hidden: true,
+        timeout: 30000,
+      });
+      console.log("✔️ Terms of Service accepted");
+      return;
+    } catch (err) {
+      if (attempt === 3) {
+        console.log("ℹ️ No TOS dialog found, skipping.");
+      }
     }
-    await waitAndClick(page, 'button[aria-label="Accept terms of service"]');
-    await page.waitForSelector("#mat-mdc-checkbox-0-input", {
-      hidden: true,
-      timeout: 30000,
-    });
-    console.log("✔️ Terms of Service accepted");
-  } catch {}
+  }
 }
 
 async function handleDriveAccess(page: any, email: string): Promise<void> {
@@ -218,6 +229,8 @@ async function handleDriveAccess(page: any, email: string): Promise<void> {
   try {
     popup = await popupPromise;
     await (popup as any).setDefaultTimeout(60000);
+    await (popup as any).bringToFront();
+    console.log("✅ Popup appeared and brought to front.");
   } catch (err: any) {
     console.error("⚠️ Failed to handle popup:", err.message);
     return;
@@ -225,69 +238,75 @@ async function handleDriveAccess(page: any, email: string): Promise<void> {
 
   // 6. Improved account selection
   try {
-    await (popup as any).waitForSelector('div[jsname="MBVUVe"]', {
-      visible: true,
-      timeout: 60000,
-    });
+    const accountSelector = `div[data-identifier="${email}"]`;
+    console.log(`⏳ Waiting for account selector: ${accountSelector}`);
 
-    // Multiple selector strategies
-    const selectors = [
-      `div[jsname="MBVUVe"][data-identifier="${email}"]`,
-      `div[data-identifier="${email}"]`,
-      `div[jsname="MBVUVe"]:has(text("${email}"))`,
-    ];
+    // Wait for the selector to appear in the popup or one of its frames
+    await (popup as any).waitForFunction(
+      (selector: string) => {
+        const frames = Array.from(document.querySelectorAll("iframe"));
+        if (document.querySelector(selector)) return true;
+        for (const frame of frames) {
+          if (frame.contentDocument?.querySelector(selector)) return true;
+        }
+        return false;
+      },
+      { timeout: 60000 },
+      accountSelector
+    );
+    console.log(`✅ Account selector found in page or iframe.`);
 
-    let handle = null;
-    for (const selector of selectors) {
-      // Check in frames
-      for (const frame of (popup as any).frames()) {
-        handle = await frame.$(selector);
-        if (handle) break;
+    let handle = await (popup as any).$(accountSelector);
+    let targetFrame = null;
+
+    if (!handle) {
+      const frames = (popup as any).frames();
+      for (const frame of frames) {
+        handle = await frame.$(accountSelector);
+        if (handle) {
+          targetFrame = frame;
+          break;
+        }
       }
-      // Check in main page
-      if (!handle) {
-        handle = await (popup as any).$(selector);
-      }
-      if (handle) break;
     }
 
     if (!handle) {
-      console.warn(`⚠️ Account ${email} not found in popup`);
+      console.error(`❌ Account ${email} not found in popup after waiting.`);
       return;
     }
 
-    // 7. Improved click handling
-    await handle.evaluate((el: any) =>
+    console.log(`🖱️ Attempting to click on account: ${email}`);
+    await handle.evaluate((el: Element) =>
       el.scrollIntoView({ block: "center", behavior: "smooth" })
     );
-    await (popup as any).waitForTimeout(500);
 
-    try {
-      await handle.click();
-    } catch {
-      try {
-        await (popup as any).evaluate((el: any) => el.click(), handle);
-      } catch {
-        const box = await handle.boundingBox();
-        await (popup as any).mouse.click(
-          box.x + box.width / 2,
-          box.y + box.height / 2
-        );
-      }
-    }
+    const targetContext = targetFrame || popup;
+    await (targetContext as any).waitForTimeout(500); // Wait for scroll animation
+
+    // More robust click
+    await handle.click({ delay: 100 + Math.random() * 100 });
 
     console.log(`✔️ Account ${email} selected successfully`);
 
     // 8. Enhanced navigation waiting
-    await Promise.race([
-      (popup as any).waitForNavigation({
-        waitUntil: "networkidle0",
-        timeout: 120000,
-      }),
-      (popup as any).waitForNavigation({ waitUntil: "load", timeout: 120000 }),
-    ]);
+    console.log("⏳ Waiting for navigation after account selection...");
+    await (popup as any).waitForNavigation({
+      waitUntil: "networkidle0",
+      timeout: 120000,
+    });
+    console.log("✅ Navigation complete.");
   } catch (err: any) {
     console.error("⚠️ Error during account selection:", err.message);
+    const screenshotPath = path.join(
+      ERRORS_ROOT,
+      `account-selection-error-${sanitize(email)}.png`
+    );
+    try {
+      await (popup as any).screenshot({ path: screenshotPath });
+      console.error(`📷 Screenshot saved to: ${screenshotPath}`);
+    } catch (ssError: any) {
+      console.error(`⚠️ Could not take screenshot: ${ssError.message}`);
+    }
   } finally {
     if (popup && !(popup as any).isClosed()) {
       await (popup as any).close();
@@ -303,6 +322,149 @@ async function handleDriveAccess(page: any, email: string): Promise<void> {
     console.log("✔️ Drive access completed successfully");
   } catch (err) {
     console.warn("⚠️ Drive button still visible after process");
+  }
+}
+
+async function handleEnableSaving(page: any, email: string): Promise<void> {
+  try {
+    console.log(
+      "⏳ Langkah 1: Mencari tombol 'Enable saving' di halaman utama..."
+    );
+
+    // Selector yang spesifik dan andal untuk tombol "Enable saving"
+    const enableSavingButtonSelector = "button.enable-drive-button";
+    const enableBtn = await page.waitForSelector(enableSavingButtonSelector, {
+      visible: true,
+      timeout: 15000, // Waktu tunggu 15 detik
+    });
+    console.log("✅ Tombol 'Enable saving' ditemukan.");
+
+    // -------------------------------------------------------------------
+
+    console.log(
+      "⏳ Langkah 2: Menyiapkan 'pendengar' untuk popup yang akan muncul..."
+    );
+    // Buat sebuah Promise yang akan selesai HANYA JIKA popup terdeteksi.
+    // Ini adalah cara paling andal untuk menangani popup.
+    const popupPromise = new Promise<any>((resolve, reject) => {
+      // Set timeout manual jika popup tidak muncul sama sekali
+      const timeoutId = setTimeout(
+        () =>
+          reject(new Error("Timeout: Popup tidak muncul setelah 30 detik.")),
+        30000
+      );
+
+      // 'targetcreated' adalah event saat tab/popup baru dibuat.
+      page.browser().once("targetcreated", async (target: any) => {
+        // Filter untuk memastikan itu adalah popup yang benar
+        if (
+          target.type() === "page" &&
+          target.url().includes("oauthchooseaccount")
+        ) {
+          clearTimeout(timeoutId); // Batalkan timeout jika popup ditemukan
+          const newPopupPage = await target.page();
+          if (newPopupPage) {
+            resolve(newPopupPage); // Kirim halaman popup yang baru
+          } else {
+            reject(
+              new Error("Popup terdeteksi tetapi gagal mendapatkan halamannya.")
+            );
+          }
+        }
+      });
+    });
+
+    // -------------------------------------------------------------------
+
+    console.log(
+      "🖱️ Langkah 3: Mengklik tombol 'Enable saving' untuk memicu popup..."
+    );
+    await enableBtn.click();
+
+    // -------------------------------------------------------------------
+
+    let popup: any;
+    try {
+      console.log(
+        "⏳ Langkah 4: Menunggu 'pendengar' menangkap halaman popup..."
+      );
+      popup = await popupPromise; // Tunggu hingga Promise di atas selesai
+      await popup.bringToFront(); // Bawa popup ke depan untuk visual
+      console.log("✅ Popup berhasil ditangkap dan difokuskan.");
+    } catch (err: any) {
+      console.error("⚠️ Gagal menangani kemunculan popup:", err.message);
+      return; // Hentikan fungsi jika popup gagal muncul
+    }
+
+    // -------------------------------------------------------------------
+
+    // MULAI DARI SINI, SEMUA PERINTAH DIJALANKAN DI DALAM 'popup', BUKAN 'page'
+
+    try {
+      // Ini adalah selector yang paling TEPAT dan STABIL berdasarkan HTML Anda
+      const accountSelector = `div[data-identifier="${email}"]`;
+
+      console.log(
+        `⏳ Langkah 5: Mencari elemen akun dengan selector: ${accountSelector}`
+      );
+
+      // Tunggu hingga elemen akun muncul DI DALAM POPUP
+      const accountElement = await popup.waitForSelector(accountSelector, {
+        visible: true,
+        timeout: 30000, // Beri waktu 30 detik untuk muncul
+      });
+      console.log(`✅ Akun ${email} ditemukan di dalam popup.`);
+
+      // Klik elemen dengan jeda acak untuk simulasi perilaku manusia
+      await accountElement.click({ delay: 200 + Math.random() * 100 });
+      console.log(`✔️ Akun ${email} BERHASIL DIKLIK.`);
+
+      // Setelah diklik, biasanya popup akan memproses atau bernavigasi
+      console.log(
+        "⏳ Langkah 6: Menunggu proses otorisasi setelah akun diklik..."
+      );
+      await popup.waitForNavigation({
+        waitUntil: "networkidle0",
+        timeout: 60000,
+      });
+      console.log("✅ Proses otorisasi selesai (navigasi terdeteksi).");
+    } catch (err: any) {
+      console.error(
+        "⚠️ Gagal menemukan atau mengklik akun di dalam popup:",
+        err.message
+      );
+      // Ambil screenshot popup untuk debugging jika terjadi error
+      const screenshotPath = path.join(
+        ERRORS_ROOT,
+        `popup-error-${sanitize(email)}.png`
+      );
+      await popup.screenshot({ path: screenshotPath, fullPage: true });
+      console.error(
+        `📷 Screenshot popup yang gagal disimpan di: ${screenshotPath}`
+      );
+    } finally {
+      // Apapun yang terjadi (berhasil atau gagal), tutup popup jika masih ada
+      if (popup && !popup.isClosed()) {
+        await popup.close();
+        console.log("ℹ️ Popup ditutup.");
+      }
+    }
+
+    // -------------------------------------------------------------------
+
+    console.log("⏳ Langkah 7: Verifikasi akhir di halaman utama...");
+    // Tunggu hingga tombol "Enable saving" menghilang sebagai konfirmasi
+    await page.waitForSelector(enableSavingButtonSelector, {
+      hidden: true,
+      timeout: 20000,
+    });
+    console.log("🎉 Proses 'Enable saving' selesai dengan sukses!");
+  } catch (err: any) {
+    // Menangkap error dari seluruh proses di fungsi ini
+    console.error(
+      "❌ Terjadi error fatal di fungsi handleEnableSaving:",
+      err.message
+    );
   }
 }
 
@@ -395,16 +557,8 @@ async function handleOne(
     await handleSplash(page);
     await handleTOS(page);
 
-    const enableSavingButton = await page.$("button.nav-item.add-to-drive");
-    if (enableSavingButton) {
-      await handleDriveAccess(page, email);
-    } else {
-      console.log(
-        `Button "Enable saving" not found for ${email}, closing page and continuing to next account.`
-      );
-      await page.close();
-      return;
-    }
+    await handleDriveAccess(page, email);
+    await handleEnableSaving(page, email);
     return;
   }
 

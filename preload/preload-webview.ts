@@ -26,20 +26,6 @@ const PROFILE = {
   },
 };
 
-// Declare window.chrome to avoid TypeScript errors in preload
-declare global {
-  interface Window {
-    chrome: {
-      runtime: {};
-      csi: () => void;
-      loadTimes: () => void;
-      app: { isInstalled: boolean };
-    };
-    clickAllowButton: () => Promise<boolean>;
-    autoDetectAllowPopup: () => void;
-  }
-}
-
 (function () {
   "use strict";
   console.log("Anti-detection script injected.");
@@ -66,7 +52,7 @@ declare global {
   });
 
   // 4. Palsukan `userAgentData` (Client Hints) agar konsisten dengan User-Agent
-  if (navigator.userAgentData) {
+  if ((navigator as any).userAgentData) {
     Object.defineProperty(navigator, "userAgentData", {
       get: () => ({
         brands: [
@@ -157,7 +143,21 @@ declare global {
   // This is now handled by the declare global block
 
   // 11. Fungsi khusus untuk tombol Allow dengan ID spesifik
-  window.clickAllowButton = async () => {
+  (window as any).clickAllowButton = async () => {
+    // New Strategy: Check for Google Account chooser first
+    const accountChooser = document.querySelector("ul.Dl08I");
+    if (accountChooser) {
+      const firstAccount = accountChooser.querySelector("li");
+      if (firstAccount) {
+        console.log(
+          "Google Account chooser ditemukan, memilih akun pertama..."
+        );
+        firstAccount.click();
+        ipcRenderer.sendToHost("allow-button-clicked");
+        return true;
+      }
+    }
+
     console.log("Mencari tombol Allow dengan ID submit_approve_access...");
 
     // Strategy 1: Cari langsung dengan ID
@@ -212,7 +212,7 @@ declare global {
   };
 
   // Auto-detect untuk popup Allow
-  window.autoDetectAllowPopup = () => {
+  (window as any).autoDetectAllowPopup = () => {
     // Cek setiap 2 detik apakah tombol Allow muncul
     const checkInterval = setInterval(() => {
       const allowButton = document.getElementById(
@@ -241,7 +241,7 @@ declare global {
   document.addEventListener("DOMContentLoaded", () => {
     if (window.location.href.includes("accounts.google.com")) {
       setTimeout(() => {
-        window.autoDetectAllowPopup();
+        (window as any).autoDetectAllowPopup();
       }, 1000);
     }
   });

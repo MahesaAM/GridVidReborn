@@ -234,7 +234,7 @@ async function createWindow() {
           nodeIntegration: false,
           sandbox: true,
           partition: "persist:main", // Use same partition for session persistence
-          preload: join(__dirname, "../preload/preload-popup.js"), // Ensure preload script is loaded
+          preload: join(__dirname, "../preload/preload-webview.js"), // Correct preload script
         },
       });
 
@@ -1283,6 +1283,8 @@ ipcMain.handle(
         parent: win!,
         modal: false,
         webPreferences: {
+          preload: join(__dirname, "../preload/preload-popup.js"),
+          sandbox: false,
           nodeIntegration: false,
           contextIsolation: true,
           webSecurity: true,
@@ -1314,13 +1316,6 @@ ipcMain.handle(
   }
 );
 
-// Handler untuk mendapatkan preload path popup
-ipcMain.handle("get-popup-preload-path", () => {
-  return pathToFileURL(
-    join(__dirname, "../preload/preload-popup.js")
-  ).toString();
-});
-
 // IPC handlers for webview messages
 ipcMain.on("allow-button-clicked", (event) => {
   win?.webContents.send("allow-button-clicked");
@@ -1341,17 +1336,27 @@ ipcMain.on("click-allow-button", async () => {
       const clickResult = await popupWindow.webContents.executeJavaScript(`
         new Promise((resolve) => {
           const interval = setInterval(() => {
-            const button = document.getElementById("submit_approve_access");
-            if (button && button.offsetParent !== null) { // Check for visibility
-              clearInterval(interval);
-              button.click();
-              resolve(true); // Button found and clicked
+            const accountList = document.querySelector('ul.Dl08I');
+            if (accountList) {
+              const firstAccount = accountList.querySelector('li');
+              if (firstAccount) {
+                const clickableElement = firstAccount.querySelector('div[role="link"]');
+                if (clickableElement && clickableElement.offsetParent !== null) {
+                  clearInterval(interval);
+                  clickableElement.dispatchEvent(new MouseEvent('click', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window
+                  }));
+                  resolve(true);
+                }
+              }
             }
-          }, 200); // Check every 200ms
+          }, 200);
           setTimeout(() => {
             clearInterval(interval);
-            resolve(false); // Timeout, button not found or not visible
-          }, 10000); // 10 seconds timeout
+            resolve(false);
+          }, 10000);
         });
       `);
 

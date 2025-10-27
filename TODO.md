@@ -15,3 +15,9 @@
 - [ ] Handle quota exhaustion and move to next account
 - [ ] Add proper error handling and logging throughout the flow
 - [ ] Test the complete flow with a single account/task
+
+## Enable Saving Button Handling
+
+- [x] Add handleEnableSaving function in login-manager.ts to find and click "enable saving" button, handle popup, and select account
+- [x] Modify handleOne function to call handleEnableSaving after handleDriveAccess
+- [ ] Test the updated login flow to ensure enable saving is handled correctly

@@ -78,20 +78,28 @@ console.log("Preload script executed: Electron fingerprints cleaned.");
 contextBridge.exposeInMainWorld("electron", {
   sendMessage: (message: string) => ipcRenderer.send("message", message),
   onUpdateAccounts: (callback: (accounts: any[]) => void) => {
-    ipcRenderer.on("update-accounts", (_event, accounts) => callback(accounts));
-    return () => ipcRenderer.removeListener("update-accounts", callback);
+    const listener = (_event: Electron.IpcRendererEvent, accounts: any[]) =>
+      callback(accounts);
+    ipcRenderer.on("update-accounts", listener);
+    return () => ipcRenderer.removeListener("update-accounts", listener);
   },
   onUpdateTasks: (callback: (tasks: any[]) => void) => {
-    ipcRenderer.on("update-tasks", (_event, tasks) => callback(tasks));
-    return () => ipcRenderer.removeListener("update-tasks", callback);
+    const listener = (_event: Electron.IpcRendererEvent, tasks: any[]) =>
+      callback(tasks);
+    ipcRenderer.on("update-tasks", listener);
+    return () => ipcRenderer.removeListener("update-tasks", listener);
   },
   onLogMessage: (callback: (log: string) => void) => {
-    ipcRenderer.on("log-message", (_event, log) => callback(log));
-    return () => ipcRenderer.removeListener("log-message", callback);
+    const listener = (_event: Electron.IpcRendererEvent, log: string) =>
+      callback(log);
+    ipcRenderer.on("log-message", listener);
+    return () => ipcRenderer.removeListener("log-message", listener);
   },
   onNotification: (callback: (options: any) => void) => {
-    ipcRenderer.on("notification", (_event, options) => callback(options));
-    return () => ipcRenderer.removeListener("notification", callback);
+    const listener = (_event: Electron.IpcRendererEvent, options: any) =>
+      callback(options);
+    ipcRenderer.on("notification", listener);
+    return () => ipcRenderer.removeListener("notification", listener);
   },
   selectExcelFile: () => ipcRenderer.invoke("select-excel-file"),
   importAccounts: (filePath: string) =>
@@ -125,8 +133,10 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.invoke("start-video-generation", options),
   stopVideoGeneration: () => ipcRenderer.invoke("stop-video-generation"),
   onTextToVideoLog: (callback: (message: string) => void) => {
-    ipcRenderer.on("text-to-video-log", (_event, message) => callback(message));
-    return () => ipcRenderer.removeListener("text-to-video-log", callback);
+    const listener = (_event: Electron.IpcRendererEvent, message: string) =>
+      callback(message);
+    ipcRenderer.on("text-to-video-log", listener);
+    return () => ipcRenderer.removeListener("text-to-video-log", listener);
   },
   testBrowserControl: () => ipcRenderer.invoke("test-browser-control"),
   getWebviewPreloadPath: () => ipcRenderer.invoke("get-webview-preload-path"),
@@ -136,18 +146,20 @@ contextBridge.exposeInMainWorld("electron", {
     height?: number;
     title?: string;
   }) => ipcRenderer.invoke("create-popup-window", options),
-  getPopupPreloadPath: () => ipcRenderer.invoke("get-popup-preload-path"),
   onAllowButtonClicked: (callback: () => void) => {
-    ipcRenderer.on("allow-button-clicked", callback);
-    return () => ipcRenderer.removeListener("allow-button-clicked", callback);
+    const listener = () => callback();
+    ipcRenderer.on("allow-button-clicked", listener);
+    return () => ipcRenderer.removeListener("allow-button-clicked", listener);
   },
   onAutoAllowClicked: (callback: () => void) => {
-    ipcRenderer.on("auto-allow-clicked", callback);
-    return () => ipcRenderer.removeListener("auto-allow-clicked", callback);
+    const listener = () => callback();
+    ipcRenderer.on("auto-allow-clicked", listener);
+    return () => ipcRenderer.removeListener("auto-allow-clicked", listener);
   },
   onAllowButtonNotFound: (callback: () => void) => {
-    ipcRenderer.on("allow-button-not-found", callback);
-    return () => ipcRenderer.removeListener("allow-button-not-found", callback);
+    const listener = () => callback();
+    ipcRenderer.on("allow-button-not-found", listener);
+    return () => ipcRenderer.removeListener("allow-button-not-found", listener);
   },
   clickAllowButton: () => ipcRenderer.send("click-allow-button"),
 });

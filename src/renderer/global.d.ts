@@ -31,9 +31,12 @@ declare global {
     canGoForward(): boolean;
     executeJavaScript(code: string): Promise<any>;
     onDomReady?: () => void;
-    addEventListener(type: "ipc-message", listener: (event: any) => void): void;
+    addEventListener(
+      type: "ipc-message" | "dom-ready",
+      listener: (event: any) => void
+    ): void;
     removeEventListener(
-      type: "ipc-message",
+      type: "ipc-message" | "dom-ready",
       listener: (event: any) => void
     ): void;
   }
@@ -41,7 +44,12 @@ declare global {
   interface Window {
     chrome: {
       runtime: {};
+      csi: () => void;
+      loadTimes: () => void;
+      app: { isInstalled: boolean };
     };
+    clickAllowButton: () => Promise<boolean>;
+    autoDetectAllowPopup: () => void;
     electron: {
       sendMessage: (message: string) => void;
       onUpdateAccounts: (
