@@ -1194,7 +1194,7 @@ function App() {
                 </div>
 
                 {/* Logs */}
-                <div className="h-64 bg-white/5 rounded-lg border border-white/10 p-4 overflow-y-auto">
+                {/* <div className="h-64 bg-white/5 rounded-lg border border-white/10 p-4 overflow-y-auto">
                   <h3 className="text-lg font-semibold mb-2">Logs</h3>
                   <div className="space-y-1">
                     {logs.map((log, index) => (
@@ -1203,7 +1203,7 @@ function App() {
                       </div>
                     ))}
                   </div>
-                </div>
+                </div> */}
               </div>
             </>
           ) : (
