@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Account } from "@main/profile-manager";
-import { Trash2 } from "lucide-react";
+import { Trash2, ArrowLeft } from "lucide-react";
 
-const Settings: React.FC = () => {
+interface SettingsProps {
+  onBack: () => void;
+}
+
+const Settings: React.FC<SettingsProps> = ({ onBack }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [excelFile, setExcelFile] = useState("");
 
@@ -15,9 +19,11 @@ const Settings: React.FC = () => {
     loadAccounts();
 
     // Listen for account updates
-    const unsubscribe = window.electron.onUpdateAccounts((updatedAccounts) => {
-      setAccounts(updatedAccounts);
-    });
+    const unsubscribe = window.electron.onUpdateAccounts(
+      (_event, updatedAccounts) => {
+        setAccounts(updatedAccounts);
+      }
+    );
 
     return unsubscribe;
   }, []);
@@ -86,8 +92,15 @@ const Settings: React.FC = () => {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="space-y-6"
+      className="p-6 space-y-6"
     >
+      <button
+        onClick={onBack}
+        className="flex items-center px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg font-semibold transition-colors duration-200 mb-4"
+      >
+        <ArrowLeft className="w-4 h-4 mr-2" />
+        Back to Main View
+      </button>
       {/* Excel Import Section */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}

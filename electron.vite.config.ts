@@ -30,7 +30,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           preload: resolve(__dirname, "preload/preload.ts"),
-          "preload-webview": resolve(__dirname, "preload-webview.js"),
+          "preload-webview": resolve(__dirname, "preload/preload-webview.ts"),
         },
         output: {
           dir: "dist-electron/preload",

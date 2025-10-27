@@ -18,9 +18,11 @@ const Logs: React.FC = () => {
     fetchAccounts();
 
     // Subscribe to log messages
-    const unsubscribeLog = window.electron.onLogMessage((message: string) => {
-      setLogs((prevLogs) => [...prevLogs, message]);
-    });
+    const unsubscribeLog = window.electron.onLogMessage(
+      (_event, message: string) => {
+        setLogs((prevLogs) => [...prevLogs, message]);
+      }
+    );
 
     // Scroll to bottom on new log
     if (logContainerRef.current) {

@@ -20,7 +20,7 @@ const Dashboard: React.FC = () => {
     fetchInitialData();
 
     const unsubscribeAccounts = window.electron.onUpdateAccounts(
-      (accounts: Account[]) => {
+      (_event, accounts: Account[]) => {
         setTotalAccounts(accounts.length);
       }
     );

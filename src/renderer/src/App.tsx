@@ -193,15 +193,24 @@ function App() {
       const webview = webviewRef.current;
 
       // Handle new window events (popups)
-      const handleNewWindow = (event: any) => {
+      const handleNewWindow = (event: Event) => {
         // Allow popups to open - they will be handled by main process setWindowOpenHandler
-        console.log("Popup requested:", event.url);
+        console.log(
+          "Popup requested:",
+          (event as CustomEvent & { url: string }).url
+        );
       };
 
-      webview.addEventListener("new-window", handleNewWindow);
+      webview.addEventListener(
+        "new-window" as any,
+        handleNewWindow as EventListener
+      );
 
       return () => {
-        webview.removeEventListener("new-window", handleNewWindow);
+        webview.removeEventListener(
+          "new-window" as any,
+          handleNewWindow as EventListener
+        );
       };
     }
   }, [webviewRef]);
@@ -233,7 +242,7 @@ function App() {
       return result;
     } catch (error) {
       console.error("Error clicking Allow button:", error);
-      setLogs((prev) => [...prev, `✗ Error: ${error.message}`]);
+      setLogs((prev) => [...prev, `✗ Error: ${(error as Error).message}`]);
       return false;
     }
   };
@@ -1170,8 +1179,6 @@ function App() {
                       className="w-full flex-1 border-0"
                       partition="persist:main"
                       preload={preloadPath}
-                      allowpopups="true"
-                      webpreferences="contextIsolation=no,nodeIntegration=no"
                     />
                   </motion.div>
 

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, shell, ipcMain, dialog, session } from "electron";
 import { release } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url"; // Import pathToFileURL directly
 import { profileManager } from "./profile-manager";
 import { taskRunner, AutomationTask } from "./task-runner";
 import { parseAccountExcel } from "./excel-loader";
@@ -12,6 +13,13 @@ import puppeteer from "puppeteer-core";
 import path from "node:path";
 import https from "node:https";
 import { performance } from "node:perf_hooks";
+
+// Contoh User-Agent dari Chrome 125 di Windows 10
+const genuineChromeUserAgent =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+
+// Atur User-Agent secara global sebelum aplikasi siap
+app.userAgentFallback = genuineChromeUserAgent;
 
 // The built directory structure
 //
@@ -44,6 +52,12 @@ if (!app.requestSingleInstanceLock()) {
 // process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 
 // Disable Cross-Origin policies and third-party cookie blocking for Google OAuth
+app.commandLine.appendSwitch("disable-features", "AutomationControlled");
+app.commandLine.appendSwitch("disable-blink-features", "AutomationControlled");
+app.commandLine.appendSwitch(
+  "enable-features",
+  "NetworkService,NetworkServiceInProcess"
+);
 app.commandLine.appendSwitch("disable-features", "CrossOriginOpenerPolicy");
 app.commandLine.appendSwitch("disable-features", "CrossOriginEmbedderPolicy");
 app.commandLine.appendSwitch(
@@ -131,7 +145,7 @@ async function createWindow() {
       preload: join(__dirname, "../preload/preload.js"),
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false, // Temporarily disable for local development with Puppeteer
+      webSecurity: true,
       devTools: true, // Enable dev tools for debugging
       additionalArguments: [
         `--remote-debugging-port=${remoteDebuggingPort}`,
@@ -220,7 +234,7 @@ async function createWindow() {
           nodeIntegration: false,
           sandbox: true,
           partition: "persist:main", // Use same partition for session persistence
-          preload: join(__dirname, "../../preload-popup.js"), // Ensure preload script is loaded
+          preload: join(__dirname, "../preload/preload-popup.js"), // Ensure preload script is loaded
         },
       });
 
@@ -1252,7 +1266,7 @@ ipcMain.handle("test-browser-control", async () => {
 
 // IPC handler to provide the preload script path for webviews
 ipcMain.handle("get-webview-preload-path", () => {
-  return path.join(__dirname, "../preload/preload-webview.js");
+  return join(__dirname, "../preload/preload-webview.js");
 });
 
 // Popup window creation handler
@@ -1269,8 +1283,8 @@ ipcMain.handle(
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,
-          webSecurity: false,
-          allowRunningInsecureContent: true,
+          webSecurity: true,
+          allowRunningInsecureContent: false,
           webgl: true,
           enableWebSQL: true,
           partition: "persist:main", // Use same partition for session persistence
@@ -1300,7 +1314,7 @@ ipcMain.handle(
 
 // Handler untuk mendapatkan preload path popup
 ipcMain.handle("get-popup-preload-path", () => {
-  return path.join(__dirname, "../../preload-popup.js");
+  return join(__dirname, "../preload/preload-webview.js");
 });
 
 // IPC handlers for webview messages
@@ -1361,6 +1375,25 @@ ipcMain.on("click-allow-button", async () => {
 
 // Initialize settings when the app is ready
 app.whenReady().then(async () => {
+  // Anda juga bisa mengaturnya per sesi untuk kontrol lebih
+  session.defaultSession.setUserAgent(genuineChromeUserAgent);
+
+  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    // Pastikan User-Agent selalu konsisten
+    details.requestHeaders["User-Agent"] = genuineChromeUserAgent;
+
+    // Menambahkan header Client Hints yang cocok dengan User-Agent
+    details.requestHeaders["sec-ch-ua"] =
+      '"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"';
+    details.requestHeaders["sec-ch-ua-mobile"] = "?0"; // '?0' untuk desktop
+    details.requestHeaders["sec-ch-ua-platform"] = '"macOS"'; // Sesuaikan dengan OS Anda ("Windows", "Linux", dll.)
+
+    // Hapus header yang bisa mengidentifikasi Electron
+    delete details.requestHeaders["X-Electron-Version"];
+
+    callback({ cancel: false, requestHeaders: details.requestHeaders });
+  });
+
   await loadSettings();
   createWindow();
 });

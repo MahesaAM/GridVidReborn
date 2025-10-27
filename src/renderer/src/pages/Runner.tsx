@@ -19,7 +19,7 @@ const Runner: React.FC = () => {
 
     // Listen for task updates from the main process
     const unsubscribeTasks = window.electron.onUpdateTasks(
-      (updatedTasks: AutomationTask[]) => {
+      (_event, updatedTasks: AutomationTask[]) => {
         setLiveTasks(updatedTasks);
       }
     );

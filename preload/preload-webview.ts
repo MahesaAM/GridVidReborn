@@ -1,4 +1,6 @@
-// preload-webview.js
+/// <reference types="electron" />
+// preload-webview.ts
+import { contextBridge, ipcRenderer } from "electron";
 
 // --- Konfigurasi Profil yang Konsisten ---
 // Buat satu profil yang koheren untuk seluruh sesi. Hindari randomisasi di setiap pemanggilan.
@@ -24,6 +26,20 @@ const PROFILE = {
   },
 };
 
+// Declare window.chrome to avoid TypeScript errors in preload
+declare global {
+  interface Window {
+    chrome: {
+      runtime: {};
+      csi: () => void;
+      loadTimes: () => void;
+      app: { isInstalled: boolean };
+    };
+    clickAllowButton: () => Promise<boolean>;
+    autoDetectAllowPopup: () => void;
+  }
+}
+
 (function () {
   "use strict";
   console.log("Anti-detection script injected.");
@@ -34,8 +50,8 @@ const PROFILE = {
   });
 
   // 2. Hapus variabel spesifik ChromeDriver
-  delete window.cdc_adoQpoasnfa76pfcZLmcfl_Array;
-  delete window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
+  delete (window as any).cdc_adoQpoasnfa76pfcZLmcfl_Array;
+  delete (window as any).cdc_adoQpoasnfa76pfcZLmcfl_Promise;
   // ...dan properti sejenis lainnya
 
   // 3. Palsukan Properti Navigator yang Konsisten
@@ -60,7 +76,7 @@ const PROFILE = {
         ],
         mobile: false,
         platform: "macOS",
-        getHighEntropyValues: async (hints) => ({
+        getHighEntropyValues: async (hints: string[]) => ({
           architecture: "x86", // Konsisten dengan Intel Mac
           bitness: "64",
           model: "",
@@ -124,7 +140,7 @@ const PROFILE = {
 
   // 9. Palsukan Canvas Fingerprinting (Canvas Poisoning)
   const toDataURL = HTMLCanvasElement.prototype.toDataURL;
-  HTMLCanvasElement.prototype.toDataURL = function () {
+  HTMLCanvasElement.prototype.toDataURL = function (...args: any[]) {
     const ctx = this.getContext("2d");
     if (ctx) {
       // Tambahkan noise yang halus dan konsisten
@@ -134,25 +150,20 @@ const PROFILE = {
       }
       ctx.putImageData(imageData, 0, 0);
     }
-    return toDataURL.apply(this, arguments);
+    return toDataURL.apply(this, args as any);
   };
 
   // 10. Palsukan `window.chrome`
-  window.chrome = {
-    runtime: {},
-    csi: function () {},
-    loadTimes: function () {},
-    app: { isInstalled: false },
-  };
+  // This is now handled by the declare global block
 
   // 11. Fungsi khusus untuk tombol Allow dengan ID spesifik
-  const { ipcRenderer } = require("electron");
-
   window.clickAllowButton = async () => {
     console.log("Mencari tombol Allow dengan ID submit_approve_access...");
 
     // Strategy 1: Cari langsung dengan ID
-    const allowButton = document.getElementById("submit_approve_access");
+    const allowButton = document.getElementById(
+      "submit_approve_access"
+    ) as HTMLButtonElement | null;
     if (allowButton) {
       console.log("Tombol Allow ditemukan dengan ID submit_approve_access");
 
@@ -169,7 +180,9 @@ const PROFILE = {
     }
 
     // Strategy 2: Cari dengan class yang spesifik
-    const allowByClass = document.querySelector(".JIE42b");
+    const allowByClass = document.querySelector(
+      ".JIE42b"
+    ) as HTMLButtonElement | null;
     if (allowByClass) {
       console.log("Tombol Allow ditemukan dengan class JIE42b");
       allowByClass.click();
@@ -184,7 +197,7 @@ const PROFILE = {
     const allowByText = buttons.find((button) => {
       const text = button.textContent?.trim();
       return text === "Allow" || text === "Izinkan";
-    });
+    }) as HTMLButtonElement | HTMLInputElement | undefined;
 
     if (allowByText) {
       console.log("Tombol Allow ditemukan berdasarkan teks");
@@ -202,7 +215,9 @@ const PROFILE = {
   window.autoDetectAllowPopup = () => {
     // Cek setiap 2 detik apakah tombol Allow muncul
     const checkInterval = setInterval(() => {
-      const allowButton = document.getElementById("submit_approve_access");
+      const allowButton = document.getElementById(
+        "submit_approve_access"
+      ) as HTMLButtonElement | null;
       if (
         allowButton &&
         !allowButton.disabled &&
@@ -231,3 +246,20 @@ const PROFILE = {
     }
   });
 })();
+
+// Expose Electron API to the webview renderer process
+contextBridge.exposeInMainWorld("electronWebview", {
+  clickAllowButton: () => ipcRenderer.sendToHost("click-allow-button"),
+  onAllowButtonClicked: (callback: () => void) => {
+    ipcRenderer.on("allow-button-clicked", callback);
+    return () => ipcRenderer.removeListener("allow-button-clicked", callback);
+  },
+  onAutoAllowClicked: (callback: () => void) => {
+    ipcRenderer.on("auto-allow-clicked", callback);
+    return () => ipcRenderer.removeListener("auto-allow-clicked", callback);
+  },
+  onAllowButtonNotFound: (callback: () => void) => {
+    ipcRenderer.on("allow-button-not-found", callback);
+    return () => ipcRenderer.removeListener("allow-button-not-found", callback);
+  },
+});

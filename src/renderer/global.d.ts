@@ -39,12 +39,35 @@ declare global {
   }
 
   interface Window {
+    chrome: {
+      runtime: {};
+    };
     electron: {
       sendMessage: (message: string) => void;
-      onUpdateAccounts: (callback: (accounts: any[]) => void) => () => void;
-      onUpdateTasks: (callback: (tasks: any[]) => void) => () => void;
-      onLogMessage: (callback: (log: string) => void) => () => void;
-      onNotification: (callback: (options: any) => void) => () => void;
+      onUpdateAccounts: (
+        callback: (
+          event: import("electron").IpcRendererEvent,
+          accounts: any[]
+        ) => void
+      ) => () => void;
+      onUpdateTasks: (
+        callback: (
+          event: import("electron").IpcRendererEvent,
+          tasks: any[]
+        ) => void
+      ) => () => void;
+      onLogMessage: (
+        callback: (
+          event: import("electron").IpcRendererEvent,
+          log: string
+        ) => void
+      ) => () => void;
+      onNotification: (
+        callback: (
+          event: import("electron").IpcRendererEvent,
+          options: any
+        ) => void
+      ) => () => void;
 
       selectExcelFile: () => Promise<{
         canceled: boolean;
@@ -81,10 +104,24 @@ declare global {
       }) => Promise<void>;
       stopVideoGeneration: () => Promise<void>;
       onTextToVideoLog: (
-        callback: (event: any, message: string) => void
+        callback: (
+          event: import("electron").IpcRendererEvent,
+          message: string
+        ) => void
       ) => () => void;
       testBrowserControl: () => Promise<{ success: boolean; message: string }>;
       getWebviewPreloadPath: () => Promise<string>;
+      createPopupWindow: (options: {
+        url: string;
+        width?: number;
+        height?: number;
+        title?: string;
+      }) => Promise<{ success: boolean; windowId?: number; error?: string }>;
+      getPopupPreloadPath: () => Promise<string>;
+      onAllowButtonClicked: (callback: () => void) => () => void;
+      onAutoAllowClicked: (callback: () => void) => () => void;
+      onAllowButtonNotFound: (callback: () => void) => () => void;
+      clickAllowButton: () => void;
     };
   }
 }
