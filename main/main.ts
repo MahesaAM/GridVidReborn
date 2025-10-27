@@ -135,10 +135,10 @@ const url = (import.meta.env as any).VITE_DEV_SERVER_URL;
 
 async function createWindow() {
   win = new BrowserWindow({
-    title: "GridAutomation Studio",
+    title: "GridVid",
     icon: join(process.env.VITE_PUBLIC!, "favicon.ico"),
-    width: 1200,
-    height: 800,
+    width: 1920,
+    height: 1080,
     minWidth: 1000,
     minHeight: 600,
     webPreferences: {
@@ -1266,7 +1266,9 @@ ipcMain.handle("test-browser-control", async () => {
 
 // IPC handler to provide the preload script path for webviews
 ipcMain.handle("get-webview-preload-path", () => {
-  return join(__dirname, "../preload/preload-webview.js");
+  return pathToFileURL(
+    join(__dirname, "../preload/preload-webview.js")
+  ).toString();
 });
 
 // Popup window creation handler
@@ -1314,7 +1316,9 @@ ipcMain.handle(
 
 // Handler untuk mendapatkan preload path popup
 ipcMain.handle("get-popup-preload-path", () => {
-  return join(__dirname, "../preload/preload-webview.js");
+  return pathToFileURL(
+    join(__dirname, "../preload/preload-popup.js")
+  ).toString();
 });
 
 // IPC handlers for webview messages

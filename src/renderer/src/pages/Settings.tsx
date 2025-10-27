@@ -143,7 +143,7 @@ const Settings: React.FC<SettingsProps> = ({ onBack }) => {
         className="bg-white/10 backdrop-blur-md rounded-2xl p-6 shadow-xl border border-white/20"
       >
         <h3 className="text-lg font-semibold text-white/80 mb-4">
-          Accounts List ({accounts.length})
+          Accounts List ({accounts ? accounts.length : 0})
         </h3>
         <div className="overflow-x-auto">
           <div className="flex justify-between items-center mb-4">

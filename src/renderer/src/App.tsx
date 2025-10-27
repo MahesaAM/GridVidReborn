@@ -72,7 +72,7 @@ function App() {
   // Get webview preload path on mount
   useEffect(() => {
     window.electron.getWebviewPreloadPath().then((path) => {
-      setPreloadPath(`file://${path}`);
+      setPreloadPath(path);
     });
   }, []);
 
@@ -1091,12 +1091,6 @@ function App() {
           {/* Action Buttons */}
           <div className="mb-6 space-y-2">
             <button
-              onClick={handleTestBrowser}
-              className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold transition-colors duration-200"
-            >
-              Test Browser Control
-            </button>
-            <button
               onClick={handleGenerate}
               disabled={isGenerating}
               className={`w-full px-4 py-3 rounded-lg font-semibold transition-colors duration-200 ${
@@ -1178,6 +1172,7 @@ function App() {
                       src={currentUrl}
                       className="w-full flex-1 border-0"
                       partition="persist:main"
+                      allowpopups="true"
                       preload={preloadPath}
                     />
                   </motion.div>

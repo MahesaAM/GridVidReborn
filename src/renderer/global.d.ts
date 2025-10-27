@@ -10,7 +10,7 @@ declare global {
         src: string;
         partition?: string;
         webpreferences?: string;
-        allowpopups?: boolean;
+        allowpopups?: string;
         nodeintegration?: boolean;
         websecurity?: boolean;
         plugins?: boolean;
