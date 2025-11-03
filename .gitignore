@@ -1,1 +1,6 @@
 node_modules/
+dist-electron/
+out/
+release/
+puppeteer-chromium/
+.DS_Store
