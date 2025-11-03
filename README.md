@@ -1,8 +1,10 @@
-# GridAutomation Studio
+# GridVid
+
+# GridVid
 
 ## Electron Multi-Account AI Studio Automation System (Text-to-Video & Image-to-Video)
 
-GridAutomation Studio is a cross-platform ElectronJS application designed to automate batch generation tasks on Google AI Studio using multiple accounts. It features an internal browser controlled by Puppeteer-core, allowing for efficient text-to-video and image-to-video generation.
+GridVid is a cross-platform ElectronJS application designed to automate batch generation tasks on Google AI Studio using multiple accounts. It features an internal browser controlled by Puppeteer-core, allowing for efficient text-to-video and image-to-video generation.
 
 ## ✨ Features
 
@@ -36,7 +38,7 @@ GridAutomation Studio is a cross-platform ElectronJS application designed to aut
 ## 📂 Folder Structure
 
 ```
-GridAutomationStudio/
+GridVid/
 ├── main/
 │   ├── main.ts             # Main Electron process setup and IPC handlers
 │   ├── puppeteer-manager.ts  # Manages Puppeteer browser instances
@@ -79,8 +81,8 @@ GridAutomationStudio/
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/GridAutomationStudio.git
-    cd GridAutomationStudio
+    git clone https://github.com/MahesaAM/GridVid.git
+    cd GridVid
     ```
 2.  **Install dependencies:**
     ```bash
@@ -132,4 +134,8 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 
 ## 📄 License
 
-This project is licensed under the MIT License.
+# This project is licensed under the MIT License.
+
+# GridVid
+
+> > > > > > > b07ff78176e1e368a3f43a2a99ed9a2d48a11d16
