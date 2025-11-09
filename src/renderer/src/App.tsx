@@ -957,7 +957,7 @@ function App() {
                 }`}
               >
                 <Type className="w-4 h-4 mr-2" />
-                Text to Video
+                Text
               </button>
               <button
                 onClick={() => setMode("image-to-video")}
@@ -968,7 +968,7 @@ function App() {
                 }`}
               >
                 <Image className="w-4 h-4 mr-2" />
-                Image to Video
+                Image
               </button>
             </div>
           </div>
