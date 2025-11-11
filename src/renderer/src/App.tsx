@@ -699,11 +699,62 @@ function App() {
         }
       };
 
+      // Function to check remaining quota
+      const checkQuota = async () => {
+        if (!webviewRef.current) return 0;
+
+        try {
+          const quotaText = await webviewRef.current.executeJavaScript(`
+            const quotaElement = document.querySelector('.remaining-quota');
+            if (quotaElement) {
+              const text = quotaElement.textContent || '';
+              const match = text.match(/(\\d+)\\/\\d+/);
+              return match ? parseInt(match[1]) : 10; // Default to 10 if can't parse
+            }
+            return 10; // Default if element not found
+          `);
+          return quotaText;
+        } catch (error) {
+          console.error("Error checking quota:", error);
+          return 10; // Default on error
+        }
+      };
+
+      // Function to close webview and prepare for new account
+      const closeWebviewForNewAccount = async () => {
+        if (webviewRef.current) {
+          // Clear the webview by navigating to blank page
+          setCurrentUrl("about:blank");
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
+          // Force reload to clear session
+          if (webviewRef.current) {
+            webviewRef.current.reload();
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+          }
+        }
+      };
+
       // Function to generate video with current prompt
       const generateVideo = async (prompt: string) => {
         if (!webviewRef.current) return false;
 
         try {
+          // Check quota before attempting generation
+          const remainingQuota = await checkQuota();
+          if (remainingQuota <= 0) {
+            setLogs((prev) => [
+              ...prev,
+              `Account ${allAccounts[accountIndex].email} has no remaining quota`,
+            ]);
+            return "quota_exceeded";
+          }
+
+          setLogs((prev) => [
+            ...prev,
+            `Remaining quota: ${remainingQuota} generations`,
+          ]);
+
           // Navigate to new video page if not already there
           const currentUrl = await webviewRef.current.executeJavaScript(
             `window.location.href`
@@ -754,7 +805,7 @@ function App() {
 
           // Click generate button
           await webviewRef.current.executeJavaScript(`
-            const runBtn = document.querySelector('run-button button:not([disabled])');
+            const runBtn = document.querySelector('ms-run-button button.run-button:not([disabled])');
             if (runBtn) {
               runBtn.click();
             }
@@ -843,6 +894,7 @@ function App() {
 
           if (result === "success") {
             promptIndex++;
+            // Continue to next prompt with same account
           } else if (result === "quota_exceeded") {
             exhaustedAccounts.add(accountIndex);
             accountQuotaExceeded = true;
@@ -850,8 +902,10 @@ function App() {
               ...prev,
               `Switching to next account due to quota exhaustion`,
             ]);
+            // Close webview and prepare for new account
+            await closeWebviewForNewAccount();
           } else {
-            // Failed or timeout - mark as failed and continue
+            // Failed or timeout - mark as failed and continue with next prompt
             setStats((prev) => ({ ...prev, failed: prev.failed + 1 }));
             promptIndex++;
           }
