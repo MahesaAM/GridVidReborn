@@ -49,7 +49,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 // Remove electron security warnings
-// process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
+process.env["ELECTRON_DISABLE_SECURITY_WARNINGS"] = "true";
 
 // Disable Cross-Origin policies and third-party cookie blocking for Google OAuth
 app.commandLine.appendSwitch("disable-features", "AutomationControlled");
@@ -67,6 +67,7 @@ app.commandLine.appendSwitch(
 
 let win: BrowserWindow | null = null;
 let popupWindow: BrowserWindow | null = null; // Declare popupWindow here
+const popupWindows = new Map<number, BrowserWindow>();
 // Here you can define the specific port for remote debugging
 const remoteDebuggingPort = 9222;
 
@@ -189,6 +190,48 @@ async function createWindow() {
     },
   });
 
+  // Handle popup windows from webview (Google OAuth)
+  win!.webContents.setWindowOpenHandler(({ url }) => {
+    // Buat dan simpan referensi ke window popup baru
+    const newPopupWindow = new BrowserWindow({
+      // Rekomendasi opsi untuk popup auth:
+      parent: win!,
+      modal: true,
+      show: false,
+      width: 450,
+      height: 700,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        partition: "persist:main", // ESSENTIAL for sharing session with webview
+        preload: join(__dirname, "../preload/preload-webview.js"),
+      },
+    });
+
+    popupWindow = newPopupWindow; // Keep track of the last opened popup
+    popupWindows.set(newPopupWindow.webContents.id, newPopupWindow);
+
+    // Tampilkan saat siap
+    newPopupWindow.once("ready-to-show", () => {
+      newPopupWindow.show();
+    });
+
+    // Hapus referensi saat ditutup
+    newPopupWindow.on("closed", () => {
+      if (popupWindow === newPopupWindow) {
+        popupWindow = null;
+      }
+      popupWindows.delete(newPopupWindow.webContents.id);
+    });
+
+    // Muat URL popup
+    newPopupWindow.loadURL(url);
+
+    // Beri tahu Electron bahwa kita telah menangani pembuatan window
+    return { action: "deny" };
+  });
+
   try {
     if ((import.meta.env as any).VITE_DEV_SERVER_URL) {
       // electron-vite-vue#298
@@ -213,41 +256,6 @@ async function createWindow() {
     // Send initial accounts and tasks to renderer
     win?.webContents.send("update-accounts", profileManager.getAccounts());
     // win?.webContents.send('update-tasks', taskRunner.getTasks()); // Assuming taskRunner has a getTasks method
-  });
-
-  // Handle popup windows from webview (Google OAuth)
-  win!.webContents.setWindowOpenHandler(({ url }) => {
-    // Check if it's a Google OAuth or accounts URL
-    if (
-      url.includes("accounts.google.com") ||
-      url.includes("oauth2") ||
-      url.includes("drive.google.com")
-    ) {
-      popupWindow = new BrowserWindow({
-        // Assign to popupWindow
-        width: 600,
-        height: 700,
-        parent: win!,
-        modal: false,
-        webPreferences: {
-          contextIsolation: true,
-          nodeIntegration: false,
-          sandbox: true,
-          partition: "persist:main", // Use same partition for session persistence
-          preload: join(__dirname, "../preload/preload-webview.js"), // Correct preload script
-        },
-      });
-
-      popupWindow.loadURL(url);
-      popupWindow.on("closed", () => {
-        popupWindow = null; // Clear reference when closed
-      });
-      return { action: "deny" }; // Prevent default behavior
-    }
-
-    // For other external links, open in default browser
-    if (url.startsWith("https:")) shell.openExternal(url);
-    return { action: "deny" };
   });
 
   // Allow permissions for Google domains
@@ -1276,7 +1284,7 @@ ipcMain.handle(
   "create-popup-window",
   async (event, { url, width, height, title }) => {
     try {
-      const popupWindow = new BrowserWindow({
+      const newPopupWindow = new BrowserWindow({
         width: width || 800,
         height: height || 600,
         title: title || "Popup",
@@ -1298,17 +1306,23 @@ ipcMain.handle(
         },
       });
 
-      // Remove menu bar in popup
-      popupWindow.setMenuBarVisibility(false);
+      popupWindow = newPopupWindow; // Keep track of the last opened popup
+      popupWindows.set(newPopupWindow.webContents.id, newPopupWindow);
 
-      await popupWindow.loadURL(url);
+      // Remove menu bar in popup
+      newPopupWindow.setMenuBarVisibility(false);
+
+      await newPopupWindow.loadURL(url);
 
       // Handle window closed
-      popupWindow.on("closed", () => {
-        // Cleanup if needed
+      newPopupWindow.on("closed", () => {
+        if (popupWindow === newPopupWindow) {
+          popupWindow = null;
+        }
+        popupWindows.delete(newPopupWindow.webContents.id);
       });
 
-      return { success: true, windowId: popupWindow.id };
+      return { success: true, windowId: newPopupWindow.id };
     } catch (error: any) {
       console.error("Failed to create popup window:", error);
       return { success: false, error: error.message };
@@ -1329,56 +1343,130 @@ ipcMain.on("allow-button-not-found", (event) => {
   win?.webContents.send("allow-button-not-found");
 });
 
-ipcMain.on("click-allow-button", async () => {
-  if (popupWindow) {
-    try {
-      // Execute JavaScript in the popup window to click the button
-      const clickResult = await popupWindow.webContents.executeJavaScript(`
-        new Promise((resolve) => {
-          const interval = setInterval(() => {
-            const accountList = document.querySelector('ul.Dl08I');
-            if (accountList) {
-              const firstAccount = accountList.querySelector('li');
-              if (firstAccount) {
-                const clickableElement = firstAccount.querySelector('div[role="link"]');
-                if (clickableElement && clickableElement.offsetParent !== null) {
-                  clearInterval(interval);
-                  clickableElement.dispatchEvent(new MouseEvent('click', {
-                    bubbles: true,
-                    cancelable: true,
-                    view: window
-                  }));
-                  resolve(true);
-                }
-              }
-            }
-          }, 200);
-          setTimeout(() => {
-            clearInterval(interval);
-            resolve(false);
-          }, 10000);
-        });
-      `);
+ipcMain.handle("click-allow-button", async (event, emailToClick) => {
+  let targetPopup = popupWindow;
 
-      if (clickResult) {
-        win?.webContents.send("allow-button-clicked");
-        sendLogToRenderer("Allow button clicked in popup.");
-      } else {
-        win?.webContents.send("allow-button-not-found");
-        sendLogToRenderer(
-          "ERROR: Allow button not found or not visible in popup after waiting."
-        );
+  // If the main popup reference is invalid, try to find another one from our map
+  if (!targetPopup || targetPopup.isDestroyed()) {
+    // Find the last created, valid popup window
+    const availablePopups = Array.from(popupWindows.values()).reverse();
+    targetPopup = availablePopups.find((p) => p && !p.isDestroyed()) || null;
+  }
+
+  // Fallback: search all BrowserWindow instances for likely OAuth popup (accounts.google.com)
+  if (!targetPopup) {
+    const allWindows = BrowserWindow.getAllWindows().reverse();
+    for (const w of allWindows) {
+      try {
+        const url = w.webContents.getURL?.() || "";
+        if (url && url.includes("accounts.google.com")) {
+          targetPopup = w;
+          break;
+        }
+      } catch (err) {
+        // ignore windows we cannot query
       }
-    } catch (error: any) {
-      console.error("Error during popup button click execution:", error);
-      win?.webContents.send("allow-button-not-found");
-      sendLogToRenderer(
-        `ERROR: Failed to execute click script in popup: ${error.message}`
-      );
     }
-  } else {
-    win?.webContents.send("allow-button-not-found");
-    sendLogToRenderer("ERROR: Popup window not found to click allow button.");
+  }
+
+  if (!targetPopup) {
+    console.error("click-allow-button: Window popup tidak ditemukan.");
+    // Log available windows for diagnostics
+    const allWindows = BrowserWindow.getAllWindows();
+    const windowInfo = allWindows.map((w) => {
+      let u = "";
+      try {
+        u = w.webContents.getURL();
+      } catch (err) {
+        u = "<unavailable>";
+      }
+      return { id: w.id, url: u };
+    });
+    console.error("Available windows:", windowInfo);
+    // Send diagnostic info to renderer logs as well
+    win?.webContents.send(
+      "log-message",
+      `[${new Date().toLocaleString()}] click-allow-button: Popup not found. Existing windows: ${JSON.stringify(
+        windowInfo
+      )}`
+    );
+    win!.webContents.send("allow-button-not-found"); // Kirim error kembali
+    return { success: false, message: "Popup not found", windows: windowInfo };
+  }
+
+  console.log(
+    `Mencoba mengklik email "${emailToClick}" di popup (window id: ${targetPopup.id})...`
+  );
+
+  try {
+    // Ensure webContents is ready before executing script
+    if (targetPopup.webContents.isLoading()) {
+      // wait for load or dom-ready with a small timeout
+      await new Promise((resolve) => {
+        const t = setTimeout(resolve, 3000);
+        targetPopup!.webContents.once("dom-ready", () => {
+          clearTimeout(t);
+          resolve(undefined);
+        });
+      });
+    }
+
+    // Skrip ini akan dieksekusi di dalam window POPUP
+    const clickScript = `
+      (() => {
+        const accountElements = document.querySelectorAll('li[data-email], div[data-email], [data-identifier]');
+
+        for (const el of accountElements) {
+          const email = el.dataset.email || el.dataset.identifier;
+          const text = el.innerText || '';
+          if (email === '${emailToClick}' || text.includes('${emailToClick}')) {
+            if (el instanceof HTMLElement) {
+              el.click();
+            }
+            return { success: true, clicked: 'email', email: '${emailToClick}' };
+          }
+        }
+
+        const allowButton = Array.from(document.querySelectorAll('button, [role="button"]'))
+                                 .find(btn => (btn.textContent||"" ).toLowerCase().includes('allow') || (btn.textContent||"").toLowerCase().includes('izinkan'));
+        if (allowButton && allowButton instanceof HTMLElement) {
+          allowButton.click();
+          return { success: true, clicked: 'allow_button' };
+        }
+
+        return { success: false, message: 'Element not found' };
+      })();
+    `;
+
+    const result = await targetPopup.webContents.executeJavaScript(
+      clickScript,
+      true
+    );
+
+    if (result && result.success) {
+      console.log(`Sukses mengklik: ${result.clicked}`);
+      win!.webContents.send("popup-action-success");
+    } else {
+      console.error(
+        "Gagal mengklik di dalam popup:",
+        result?.message || "unknown"
+      );
+      win!.webContents.send("popup-action-failed");
+    }
+
+    return result;
+  } catch (e: any) {
+    console.error("Error saat eksekusi skrip di popup:", e);
+    // Send detailed error to renderer logs to help debugging
+    win?.webContents.send(
+      "log-message",
+      `[${new Date().toLocaleString()}] click-allow-button: script execution error: ${
+        e?.message || e
+      }
+${e?.stack ? "\n" + e.stack : ""}`
+    );
+    win!.webContents.send("popup-action-failed");
+    return { success: false, message: e.message, stack: e?.stack };
   }
 });
 

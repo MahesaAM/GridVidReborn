@@ -126,10 +126,9 @@ declare global {
         title?: string;
       }) => Promise<{ success: boolean; windowId?: number; error?: string }>;
       getPopupPreloadPath: () => Promise<string>;
-      onAllowButtonClicked: (callback: () => void) => () => void;
-      onAutoAllowClicked: (callback: () => void) => () => void;
-      onAllowButtonNotFound: (callback: () => void) => () => void;
-      clickAllowButton: () => void;
+      onPopupActionSuccess: (callback: () => void) => () => void;
+      onPopupActionFailed: (callback: () => void) => () => void;
+      clickAllowButton: (email: string) => Promise<any>;
     };
   }
 }

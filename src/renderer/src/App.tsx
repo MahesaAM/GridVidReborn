@@ -123,12 +123,15 @@ function App() {
   // Effect to listen for popup events from the main process
   useEffect(() => {
     const unsubscribes = [
-      window.electron.onAllowButtonClicked(() => {
-        setLogs((prev) => [...prev, "✓ Tombol Allow di popup berhasil diklik"]);
+      window.electron.onPopupActionSuccess(() => {
+        setLogs((prev) => [...prev, "✓ Aksi di popup (klik email) berhasil."]);
         setIsPopupDetected(false);
       }),
-      window.electron.onAllowButtonNotFound(() => {
-        setLogs((prev) => [...prev, "✗ Tombol Allow di popup tidak ditemukan"]);
+      window.electron.onPopupActionFailed(() => {
+        setLogs((prev) => [
+          ...prev,
+          "✗ Elemen di popup (email) tidak ditemukan.",
+        ]);
         setIsPopupDetected(false);
       }),
     ];
@@ -247,21 +250,27 @@ function App() {
   };
 
   // Fungsi khusus untuk klik tombol Allow via IPC
-  const clickAllowButton = () => {
-    window.electron.clickAllowButton();
+  // 1. Ubah fungsi ini untuk MENERIMA email
+  const clickAllowButton = (email: string) => {
+    // Kirim email ke proses main
+    window.electron.clickAllowButton(email);
   };
 
   // Fungsi untuk detect dan handle popup Allow
-  const detectAndHandleAllowPopup = () => {
-    setLogs((prev) => [...prev, "Meminta untuk mengklik tombol di popup..."]);
+  // 2. Ubah fungsi ini untuk MENERIMA dan MENERUSKAN email
+  const detectAndHandleAllowPopup = (email: string) => {
+    setLogs((prev) => [
+      ...prev,
+      `Mendeteksi popup, mencari email: ${email}...`,
+    ]);
     setIsPopupDetected(true);
 
-    // The retry logic is in the main process. We just need to trigger it.
-    clickAllowButton();
-    // The result will be handled by the onAllowButtonClicked/onAllowButtonNotFound listeners.
+    // Teruskan email ke clickAllowButton
+    clickAllowButton(email);
   };
 
-  const enableSaving = async () => {
+  // 3. Ubah fungsi ini untuk MENERIMA dan MENERUSKAN email
+  const enableSaving = async (email: string) => {
     if (!webviewRef.current) return;
     setLogs((prev) => [...prev, "Mencari tombol 'Enable saving'..."]);
 
@@ -278,7 +287,9 @@ function App() {
     // Wait for the popup to appear and then handle it
     setLogs((prev) => [...prev, "Menunggu popup pemilihan akun..."]);
     await new Promise((resolve) => setTimeout(resolve, 2500));
-    await detectAndHandleAllowPopup();
+
+    // Teruskan email ke detectAndHandleAllowPopup
+    await detectAndHandleAllowPopup(email);
   };
 
   const handleGenerate = async () => {
@@ -657,7 +668,7 @@ function App() {
           await studioPromise;
 
           // Handle Enable Drive button
-          await enableSaving();
+          await enableSaving(account.email);
 
           // Handle splash dialog
           await webviewRef.current.executeJavaScript(`

@@ -16425,12 +16425,15 @@ function App() {
   }, []);
   reactExports.useEffect(() => {
     const unsubscribes = [
-      window.electron.onAllowButtonClicked(() => {
-        setLogs((prev) => [...prev, "✓ Tombol Allow di popup berhasil diklik"]);
+      window.electron.onPopupActionSuccess(() => {
+        setLogs((prev) => [...prev, "✓ Aksi di popup (klik email) berhasil."]);
         setIsPopupDetected(false);
       }),
-      window.electron.onAllowButtonNotFound(() => {
-        setLogs((prev) => [...prev, "✗ Tombol Allow di popup tidak ditemukan"]);
+      window.electron.onPopupActionFailed(() => {
+        setLogs((prev) => [
+          ...prev,
+          "✗ Elemen di popup (email) tidak ditemukan."
+        ]);
         setIsPopupDetected(false);
       })
     ];
@@ -16489,15 +16492,18 @@ function App() {
       };
     }
   }, [webviewRef]);
-  const clickAllowButton = () => {
-    window.electron.clickAllowButton();
+  const clickAllowButton = (email) => {
+    window.electron.clickAllowButton(email);
   };
-  const detectAndHandleAllowPopup = () => {
-    setLogs((prev) => [...prev, "Meminta untuk mengklik tombol di popup..."]);
+  const detectAndHandleAllowPopup = (email) => {
+    setLogs((prev) => [
+      ...prev,
+      `Mendeteksi popup, mencari email: ${email}...`
+    ]);
     setIsPopupDetected(true);
-    clickAllowButton();
+    clickAllowButton(email);
   };
-  const enableSaving = async () => {
+  const enableSaving = async (email) => {
     if (!webviewRef.current) return;
     setLogs((prev) => [...prev, "Mencari tombol 'Enable saving'..."]);
     await webviewRef.current.executeJavaScript(`
@@ -16511,7 +16517,7 @@ function App() {
     `);
     setLogs((prev) => [...prev, "Menunggu popup pemilihan akun..."]);
     await new Promise((resolve) => setTimeout(resolve, 2500));
-    await detectAndHandleAllowPopup();
+    await detectAndHandleAllowPopup(email);
   };
   const handleGenerate = async () => {
     if (isGenerating) return;
@@ -16846,7 +16852,7 @@ function App() {
             "https://aistudio.google.com/u/0/generate-video?pli=1&authuser=0"
           );
           await studioPromise;
-          await enableSaving();
+          await enableSaving(account.email);
           await webviewRef.current.executeJavaScript(`
             const splashDialog = document.querySelector('mat-dialog-container');
             if (splashDialog) {

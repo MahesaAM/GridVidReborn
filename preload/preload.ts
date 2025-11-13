@@ -146,20 +146,16 @@ contextBridge.exposeInMainWorld("electron", {
     height?: number;
     title?: string;
   }) => ipcRenderer.invoke("create-popup-window", options),
-  onAllowButtonClicked: (callback: () => void) => {
+  onPopupActionSuccess: (callback: () => void) => {
     const listener = () => callback();
-    ipcRenderer.on("allow-button-clicked", listener);
-    return () => ipcRenderer.removeListener("allow-button-clicked", listener);
+    ipcRenderer.on("popup-action-success", listener);
+    return () => ipcRenderer.removeListener("popup-action-success", listener);
   },
-  onAutoAllowClicked: (callback: () => void) => {
+  onPopupActionFailed: (callback: () => void) => {
     const listener = () => callback();
-    ipcRenderer.on("auto-allow-clicked", listener);
-    return () => ipcRenderer.removeListener("auto-allow-clicked", listener);
+    ipcRenderer.on("popup-action-failed", listener);
+    return () => ipcRenderer.removeListener("popup-action-failed", listener);
   },
-  onAllowButtonNotFound: (callback: () => void) => {
-    const listener = () => callback();
-    ipcRenderer.on("allow-button-not-found", listener);
-    return () => ipcRenderer.removeListener("allow-button-not-found", listener);
-  },
-  clickAllowButton: () => ipcRenderer.send("click-allow-button"),
+  clickAllowButton: (email: string) =>
+    ipcRenderer.invoke("click-allow-button", email),
 });
